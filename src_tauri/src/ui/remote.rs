@@ -26,6 +26,8 @@ use crate::{
     ui_session_interface::{InvokeUiSession, Session},
 };
 
+use super::get_app_handle;
+
 type Video = AssetPtr<video_destination>;
 
 lazy_static::lazy_static! {
@@ -48,13 +50,6 @@ impl SciterHandler {
             allow_err!(e.call_method(func, args));
         }
     }
-    
-    // fn call_tauri(&self, app: &tauri::AppHandle, func: &str, args: &[String]) {
-    //     // if let Some(e) = self.element.lock().unwrap().as_ref() {
-    //     //     allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
-    //     // }
-    //     app.emit_all(func, args).unwrap();
-    // }
 
     // #[inline]
     // fn call2(&self, func: &str, args: &[Value]) {
@@ -88,17 +83,30 @@ impl InvokeUiSession for SciterHandler {
         }
     }
 
+    // fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
+    //     self.call("setDisplay", &make_args!(x, y, w, h));
+    //     // https://sciter.com/forums/topic/color_spaceiyuv-crash
+    //     // Nothing spectacular in decoder – done on CPU side.
+    //     // So if you can do BGRA translation on your side – the better.
+    //     // BGRA is used as internal image format so it will not require additional transformations.
+    //     VIDEO.lock().unwrap().as_mut().map(|v| {
+    //         v.stop_streaming().ok();
+    //         let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
+    //         log::info!("[video] reinitialized: {:?}", ok);
+    //     });
+    // }
+
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
-        self.call("setDisplay", &make_args!(x, y, w, h));
-        // https://sciter.com/forums/topic/color_spaceiyuv-crash
-        // Nothing spectacular in decoder – done on CPU side.
-        // So if you can do BGRA translation on your side – the better.
-        // BGRA is used as internal image format so it will not require additional transformations.
-        VIDEO.lock().unwrap().as_mut().map(|v| {
-            v.stop_streaming().ok();
-            let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
-            log::info!("[video] reinitialized: {:?}", ok);
-        });
+        
+        let app_handle: Option<tauri::AppHandle> = get_app_handle();
+        match app_handle {
+            Some(app) => {
+                app.emit_all("setDisplay", (x, y, w, h)).unwrap();
+            }
+            None => {
+                log::info!("Waiting to get app handle for macro to execute...");
+            }
+        }
     }
 
     fn update_privacy_mode(&self) {
@@ -221,10 +229,18 @@ impl InvokeUiSession for SciterHandler {
     //         .map(|v| v.render_frame(data).ok());
     // }
 
-    fn on_rgba(&self, app: &tauri::AppHandle, data: &[u8]) {
-        // log::info!("native-remote {}", serde_json::to_string(&data).unwrap());
-        // self.call_tauri(app, "native-remote", &[serde_json::to_string(&data).unwrap()]);
-        app.emit_all("native-remote", data).unwrap();
+    fn on_rgba(&self, data: &[u8]) {
+        let app_handle: Option<tauri::AppHandle> = get_app_handle();
+        match app_handle {
+            Some(app) => {
+                // log::info!("native-remote {}", serde_json::to_string(&data).unwrap());
+                // self.call_tauri(app, "native-remote", &[serde_json::to_string(&data).unwrap()]);
+                app.emit_all("native-remote", data).unwrap();
+            }
+            None => {
+                log::info!("Waiting to get app handle for macro to execute...");
+            }
+        }
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
@@ -325,7 +341,7 @@ impl sciter::EventHandler for  TauriSession {
                     let site = AssetPtr::adopt(ptr as *mut video_destination);
                     log::debug!("[video] start video");
                     *VIDEO.lock().unwrap() = Some(site);
-                    // self.reconnect();
+                    self.reconnect();
                 }
             }
             BEHAVIOR_EVENTS::VIDEO_INITIALIZED => {

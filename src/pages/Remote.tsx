@@ -1,4 +1,3 @@
-import React from 'react'
 import { invoke } from '@tauri-apps/api'
 import { listen } from '@tauri-apps/api/event'
 
