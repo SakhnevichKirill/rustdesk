@@ -63,8 +63,6 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     conn_id: i32,
     #[cfg(windows)]
     file_transfer_enabled: bool,
-
-    app: tauri::AppHandle,   
 }
 
 lazy_static::lazy_static! {
@@ -79,7 +77,7 @@ pub struct ConnectionManager<T: InvokeUiCM> {
 }
 
 pub trait InvokeUiCM: Send + Clone + 'static + Sized {
-    fn add_connection(&self, app: &tauri::AppHandle, client: &Client);
+    fn add_connection(&self, client: &Client);
 
     fn remove_connection(&self, id: i32, close: bool);
 
@@ -109,7 +107,6 @@ impl<T: InvokeUiCM> DerefMut for ConnectionManager<T> {
 impl<T: InvokeUiCM> ConnectionManager<T> {
     pub fn add_connection(
         &self,
-        app: &tauri::AppHandle,
         id: i32,
         is_file_transfer: bool,
         port_forward: String,
@@ -145,7 +142,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             .unwrap()
             .retain(|_, c| !(c.disconnected && c.peer_id == client.peer_id));
         CLIENTS.write().unwrap().insert(id, client.clone());
-        self.ui_handler.add_connection(app, &client);
+        self.ui_handler.add_connection(&client);
     }
 
     fn remove_connection(&self, id: i32, close: bool) {
@@ -319,7 +316,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                             match data {
                                 Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(&self.app, id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, self.tx.clone());
                                     self.authorized = authorized;
                                     self.conn_id = id;
                                     #[cfg(windows)]
@@ -413,7 +410,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         }
     }
 
-    async fn ipc_task(app: tauri::AppHandle, stream: Connection, cm: ConnectionManager<T>) {
+    async fn ipc_task(stream: Connection, cm: ConnectionManager<T>) {
         log::debug!("ipc task begin");
         let (tx, rx) = mpsc::unbounded_channel::<Data>();
         let mut task_runner = Self {
@@ -427,7 +424,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             conn_id: 0,
             #[cfg(windows)]
             file_transfer_enabled: false,
-            app: app.clone(),
         };
 
         while task_runner.running {
@@ -444,7 +440,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_ipc<T: InvokeUiCM>(app: tauri::AppHandle, cm: ConnectionManager<T>) {
+pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     #[cfg(windows)]
     std::thread::spawn(move || {
         log::info!("try create privacy mode window");
@@ -467,7 +463,6 @@ pub async fn start_ipc<T: InvokeUiCM>(app: tauri::AppHandle, cm: ConnectionManag
                     Ok(stream) => {
                         log::debug!("Got new connection");
                         tokio::spawn(IpcTaskRunner::<T>::ipc_task(
-                            app.clone(),
                             Connection::new(stream),
                             cm.clone(),
                         ));

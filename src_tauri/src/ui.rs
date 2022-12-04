@@ -10,6 +10,7 @@ use std::{
 };
 
 use tauri::Manager;
+#[cfg(windows)]
 use winapi::ctypes::c_void;
 
 
@@ -24,6 +25,17 @@ pub mod remote;
 #[cfg(target_os = "windows")]
 pub mod win_privacy;
 
+lazy_static::lazy_static! {
+    static ref APPHANDLE: Arc<Mutex<Option<tauri::AppHandle>>> = Default::default();
+}
+
+fn get_app_handle() -> Option<tauri::AppHandle> {
+    APPHANDLE.lock().unwrap().clone()
+}
+
+fn set_app_handle(app_handle: tauri::AppHandle) {
+    *APPHANDLE.lock().unwrap() = Some(app_handle);
+}
 
 pub fn create_main_window(app: &tauri::AppHandle) -> tauri::Window {
     tauri::Window::builder(app, "main", tauri::WindowUrl::App("index.html".into()))
@@ -53,6 +65,7 @@ pub fn show_remote_window(app: &tauri::AppHandle) {
     }
 }
 
+#[cfg(windows)]
 pub fn get_hwnd(window: impl raw_window_handle::HasRawWindowHandle) -> Result<*mut c_void, Box<dyn Error>> {
     match window.raw_window_handle() {
         #[cfg(target_os = "windows")]
@@ -64,6 +77,7 @@ pub fn get_hwnd(window: impl raw_window_handle::HasRawWindowHandle) -> Result<*m
 }
 
 pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
+    set_app_handle(app.clone());
     #[cfg(all(windows, not(feature = "inline")))]
     unsafe {
         winapi::um::shellscalingapi::SetProcessDpiAwareness(2); // PROCESS_PER_MONITOR_DPI_AWARE
@@ -92,7 +106,7 @@ pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
         page = "install.html";
     } else if args[0] == "--cm" {
         // Implemetation "connection-manager" behavior using tauri state manager
-        app.manage(Mutex::new(cm::TauriConnectionManager::new(app.clone()))); //TODO: Move app to static
+        app.manage(Mutex::new(cm::TauriConnectionManager::new())); //TODO: Move app to static
         page = "cm.html";
     } else if (args[0] == "--connect"
         || args[0] == "--file-transfer"
