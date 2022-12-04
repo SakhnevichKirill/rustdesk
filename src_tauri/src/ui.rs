@@ -10,6 +10,7 @@ use std::{
 };
 
 use tauri::Manager;
+#[cfg(windows)]
 use winapi::ctypes::c_void;
 
 
@@ -53,6 +54,7 @@ pub fn show_remote_window(app: &tauri::AppHandle) {
     }
 }
 
+#[cfg(windows)]
 pub fn get_hwnd(window: impl raw_window_handle::HasRawWindowHandle) -> Result<*mut c_void, Box<dyn Error>> {
     match window.raw_window_handle() {
         #[cfg(target_os = "windows")]
