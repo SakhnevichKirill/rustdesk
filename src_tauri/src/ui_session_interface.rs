@@ -994,13 +994,13 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    pub fn reconnect(&self, app: tauri::AppHandle) {
+    pub fn reconnect(&self) {
         self.send(Data::Close);
         let cloned = self.clone();
         let mut lock = self.thread.lock().unwrap();
         lock.take().map(|t| t.join());
         *lock = Some(std::thread::spawn(move || {
-            io_loop(app.clone(), cloned);
+            io_loop(cloned);
         }));
     }
 
@@ -1124,7 +1124,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn update_block_input_state(&self, on: bool);
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64);
     fn adapt_size(&self);
-    fn on_rgba(&self, app: &tauri::AppHandle, data: &[u8]);
+    fn on_rgba(&self, data: &[u8]);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
@@ -1404,7 +1404,7 @@ impl<T: InvokeUiSession> Session<T> {
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn io_loop<T: InvokeUiSession>(app: tauri::AppHandle, handler: Session<T>) {
+pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
     let mut options = crate::ipc::get_options_async().await;
@@ -1504,7 +1504,7 @@ pub async fn io_loop<T: InvokeUiSession>(app: tauri::AppHandle, handler: Session
     let ui_handler = handler.ui_handler.clone();
     let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8]| {
         frame_count_cl.fetch_add(1, Ordering::Relaxed);
-        ui_handler.on_rgba(&app, data);
+        ui_handler.on_rgba(data);
     });
 
     let mut remote = Remote::new(
