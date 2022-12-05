@@ -9,13 +9,23 @@ use std::sync::Mutex;
 use std::{ops::Deref, sync::Arc};
 
 use serde::{Deserialize, Serialize};
+
+use super::get_app_handle;
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct TauriHandler;
 
 impl InvokeUiCM for TauriHandler {
-    fn add_connection(&self, app: &tauri::AppHandle, client: &crate::ui_cm_interface::Client) {
-        log::info!("add_connection {}", serde_json::to_string(&client).unwrap());
-        self.call(app, "addConnection", &[serde_json::to_string(&client).unwrap()]);
+    fn add_connection(&self, client: &crate::ui_cm_interface::Client) {
+        
+        let app_handle: Option<tauri::AppHandle> = get_app_handle();
+        match app_handle {
+            Some(app) => {
+                app.emit_all("addConnection", client).unwrap();
+            }
+            None => {
+                log::info!("Waiting to get app handle for macro to execute...");
+            }
+        }
     }
 
     fn remove_connection(&self, id: i32, close: bool) {
@@ -64,14 +74,14 @@ impl Deref for TauriConnectionManager {
 }
 
 impl TauriConnectionManager {
-    pub fn new(app: tauri::AppHandle) -> Self {
+    pub fn new() -> Self {
         #[cfg(target_os = "linux")]
         std::thread::spawn(start_pa);
         let cm = ConnectionManager {
             ui_handler: TauriHandler::default(),
         };
         let cloned = cm.clone();
-        std::thread::spawn(move || start_ipc(app.clone(), cloned));
+        std::thread::spawn(move || start_ipc(cloned));
         TauriConnectionManager(cm)
     }
 

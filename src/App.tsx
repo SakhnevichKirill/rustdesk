@@ -1,8 +1,8 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { BrowserRouter, Routes, Route, redirect } from "react-router-dom"
 import { ChakraProvider } from "@chakra-ui/provider"
 import theme from "./theme/index"
 
-import Remotes from './pages/Remotes';
+import Remotes from './pages/Remotes'
 import Remote from './pages/Remote'
 
 import { window as TWindow } from '@tauri-apps/api'
