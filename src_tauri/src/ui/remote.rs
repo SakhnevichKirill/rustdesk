@@ -51,6 +51,18 @@ impl SciterHandler {
         }
     }
 
+    fn call_tauri<S: Serialize + Clone>(&self, event: &str, payload: S) {
+        let app_handle: Option<tauri::AppHandle> = get_app_handle();
+        match app_handle {
+            Some(app) => {
+                app.emit_all(event, payload).unwrap();
+            }
+            None => {
+                log::info!("Waiting to get app handle for macro to execute...");
+            }
+        }
+    }
+
     // #[inline]
     // fn call2(&self, func: &str, args: &[Value]) {
     //     if let Some(ref e) = self.element.lock().unwrap().as_ref() {
@@ -97,16 +109,7 @@ impl InvokeUiSession for SciterHandler {
     // }
 
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
-        
-        let app_handle: Option<tauri::AppHandle> = get_app_handle();
-        match app_handle {
-            Some(app) => {
-                app.emit_all("setDisplay", (x, y, w, h)).unwrap();
-            }
-            None => {
-                log::info!("Waiting to get app handle for macro to execute...");
-            }
-        }
+        self.call_tauri("setDisplay", (x, y, w, h));
     }
 
     fn update_privacy_mode(&self) {
@@ -230,17 +233,7 @@ impl InvokeUiSession for SciterHandler {
     // }
 
     fn on_rgba(&self, data: &[u8]) {
-        let app_handle: Option<tauri::AppHandle> = get_app_handle();
-        match app_handle {
-            Some(app) => {
-                // log::info!("native-remote {}", serde_json::to_string(&data).unwrap());
-                // self.call_tauri(app, "native-remote", &[serde_json::to_string(&data).unwrap()]);
-                app.emit_all("native-remote", data).unwrap();
-            }
-            None => {
-                log::info!("Waiting to get app handle for macro to execute...");
-            }
-        }
+        self.call_tauri("native-remote", data);
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
@@ -266,7 +259,7 @@ impl InvokeUiSession for SciterHandler {
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
         // TODO:
-        // self.call2("msgbox_retry", &make_args!(msgtype, title, text, link, retry));
+        self.call_tauri("msgbox_retry", (msgtype, title, text, link, retry));
     }
     
     fn cancel_msgbox(&self, tag: &str) {
