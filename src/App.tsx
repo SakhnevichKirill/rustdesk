@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, redirect } from "react-router-dom"
+import { BrowserRouter, Routes, Route } from "react-router-dom"
 import { ChakraProvider } from "@chakra-ui/provider"
 import theme from "./theme/index"
 
