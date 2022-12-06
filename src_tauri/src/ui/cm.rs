@@ -16,16 +16,7 @@ pub struct TauriHandler;
 
 impl InvokeUiCM for TauriHandler {
     fn add_connection(&self, client: &crate::ui_cm_interface::Client) {
-        
-        let app_handle: Option<tauri::AppHandle> = get_app_handle();
-        match app_handle {
-            Some(app) => {
-                app.emit_all("addConnection", client).unwrap();
-            }
-            None => {
-                log::info!("Waiting to get app handle for macro to execute...");
-            }
-        }
+        self.call_tauri("add_connection", client);
     }
 
     fn remove_connection(&self, id: i32, close: bool) {
@@ -54,11 +45,16 @@ impl InvokeUiCM for TauriHandler {
 
 impl TauriHandler {
     #[inline]
-    fn call(&self, app: &tauri::AppHandle, func: &str, args: &[String]) {
-        // if let Some(e) = self.element.lock().unwrap().as_ref() {
-        //     allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
-        // }
-        app.emit_all(func, args).unwrap();
+    fn call_tauri<S: Serialize + Clone>(&self, event: &str, payload: S) {
+        let app_handle: Option<tauri::AppHandle> = get_app_handle();
+        match app_handle {
+            Some(app) => {
+                app.emit_all(event, payload).unwrap();
+            }
+            None => {
+                log::info!("Waiting to get app handle for macro to execute...");
+            }
+        }
     }
 }
 
