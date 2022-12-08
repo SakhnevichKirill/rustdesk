@@ -3,21 +3,38 @@ import { invoke } from '@tauri-apps/api'
 import { listen } from '@tauri-apps/api/event'
 
 const Remote = () => {
+    const [connectionLoading, setConnecitonLoading] = useState(true)
+    const [msg, setMsg] = useState("")
+
     const [remoteDim, setRemoteDim] = useState({ width: 0, height: 0 })
     const [pixels, setPixels] = useState<Uint8ClampedArray>(new Uint8ClampedArray([0]))
 
     useEffect(() => {
         const listenEvents = async () => {
+            setConnecitonLoading(true)
             await invoke('reconnect')
 
+            const unlistenMsgboxRetry = await listen('msgbox_retry', (e: {
+                payload: [
+                    // FIXME Im not sure about this fields names
+                    status: string, statusMsg: string, connectionMsg: string, idkMsg: string, idkBool: boolean
+                ]
+                }) => {
+                    console.log(e)
+                    const status = e.payload[0]
+                    if (status === 'success') {
+                        setConnecitonLoading(false)
+                        setMsg("")
+                    }
+                    if (status === 'input-password') setMsg('Подтвердите подключение')
+                })
             const unlistenSetDisplay = await listen('setDisplay', (e: { payload: [x: number, y: number, w: number, h: number] }) => {
                     setRemoteDim({ width: e.payload[2], height: e.payload[3] })
                 })
             const unlistenNativeRemote = await listen('native-remote', (e: { payload: Uint8ClampedArray }) => {
                     setPixels(new Uint8ClampedArray(e.payload))
                 })
-
-            return {unlistenSetDisplay, unlistenNativeRemote}
+            return {unlistenSetDisplay, unlistenNativeRemote, unlistenMsgboxRetry}
         }
 
         const unlisten = listenEvents().catch(() => null)
@@ -27,6 +44,7 @@ const Remote = () => {
               if (unl) {
                   unl.unlistenNativeRemote()
                   unl.unlistenSetDisplay()
+                  unl.unlistenMsgboxRetry()
               } 
            }) 
         }
@@ -46,7 +64,11 @@ const Remote = () => {
     
     return (
         <div>
-            <canvas id="canvas" {...remoteDim}></canvas>
+            {connectionLoading ?
+                "Подключаемся..." :
+                <canvas id="canvas" {...remoteDim}></canvas>
+            }
+            {msg}
         </div>
     )
 }
