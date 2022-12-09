@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+
+import { Box, Center, CircularProgress, Text } from '@chakra-ui/react'
+
 import { invoke } from '@tauri-apps/api'
 import { listen } from '@tauri-apps/api/event'
 
@@ -53,7 +56,9 @@ const Remote = () => {
     useEffect(() => {
         const { width, height} = remoteDim
         if (width && height && pixels.length > 1) {
-            const imageData = new ImageData(pixels, width)
+            const imageData = new ImageData(pixels, width, height, {
+                colorSpace: "srgb" 
+            })
             const canvas = document.getElementById('canvas') as HTMLCanvasElement
             const ctx = canvas?.getContext('2d');
             if (ctx) {
@@ -63,13 +68,15 @@ const Remote = () => {
     }, [remoteDim, pixels])
     
     return (
-        <div>
-            {connectionLoading ?
-                "Подключаемся..." :
-                <canvas id="canvas" {...remoteDim}></canvas>
-            }
-            {msg}
-        </div>
+        <Center h="100vh">
+            <Box>
+                {connectionLoading ?
+                    <>"Подключаемся..."<CircularProgress isIndeterminate/></> :
+                    <canvas id="canvas" {...remoteDim}></canvas>
+                }
+                <Text>{msg}</Text>
+            </Box>
+        </Center>
     )
 }
 

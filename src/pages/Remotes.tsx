@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Input, Box, Heading, Button } from '@chakra-ui/react'
+import { useState } from 'react'
+import { Input, Center, Stack, Heading, Button } from '@chakra-ui/react'
 
 import { invoke } from "@tauri-apps/api"
 
@@ -17,15 +17,17 @@ const Remotes = () => {
     }
 
     return (
-        <Box>
-            <Heading>Control remote desktop</Heading>
-            <Input
-                value={remoteId}
-                onChange={e => {
-                    setRemoteId(e.target.value)
-                }} />
-            <Button onClick={() => createNewConnect(remoteId, 'connect')}>Connect</Button>
-        </Box>
+        <Center h='100vh'>
+            <Stack spacing='12px'>
+                <Heading>Control remote desktop</Heading>
+                <Input
+                    value={remoteId}
+                    onChange={e => {
+                        setRemoteId(e.target.value)
+                    }} />
+                <Button onClick={() => createNewConnect(remoteId, 'connect')}>Connect</Button>
+            </Stack>
+        </Center>
     )
 }
 
