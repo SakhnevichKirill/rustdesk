@@ -62,13 +62,6 @@ impl SciterHandler {
             }
         }
     }
-
-    // #[inline]
-    // fn call2(&self, func: &str, args: &[Value]) {
-    //     if let Some(ref e) = self.element.lock().unwrap().as_ref() {
-    //         allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
-    //     }
-    // }
 }
 
 impl InvokeUiSession for SciterHandler {
@@ -81,9 +74,9 @@ impl InvokeUiSession for SciterHandler {
         }
         let mut png = Vec::new();
         if let Ok(()) = repng::encode(&mut png, cd.width as _, cd.height as _, &colors) {
-            self.call(
+            self.call_tauri(
                 "setCursorData",
-                &make_args!(
+                (
                     cd.id.to_string(),
                     cd.hotx,
                     cd.hoty,
@@ -95,39 +88,32 @@ impl InvokeUiSession for SciterHandler {
         }
     }
 
-    // fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
-    //     self.call("setDisplay", &make_args!(x, y, w, h));
-    //     // https://sciter.com/forums/topic/color_spaceiyuv-crash
-    //     // Nothing spectacular in decoder – done on CPU side.
-    //     // So if you can do BGRA translation on your side – the better.
-    //     // BGRA is used as internal image format so it will not require additional transformations.
-    //     VIDEO.lock().unwrap().as_mut().map(|v| {
-    //         v.stop_streaming().ok();
-    //         let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
-    //         log::info!("[video] reinitialized: {:?}", ok);
-    //     });
-    // }
-
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
         self.call_tauri("setDisplay", (x, y, w, h));
+        //     // https://sciter.com/forums/topic/color_spaceiyuv-crash
+        //     // Nothing spectacular in decoder – done on CPU side.
+        //     // So if you can do BGRA translation on your side – the better.
+        //     // BGRA is used as internal image format so it will not require additional transformations.
+        //     VIDEO.lock().unwrap().as_mut().map(|v| {
+        //         v.stop_streaming().ok();
+        //         let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
+        //         log::info!("[video] reinitialized: {:?}", ok);
+        //     });
     }
 
     fn update_privacy_mode(&self) {
-        self.call("updatePrivacyMode", &[]);
+        self.call_tauri("updatePrivacyMode", ());
     }
 
     fn set_permission(&self, name: &str, value: bool) {
-        // TODO:
-        // self.call2("setPermission", &make_args!(name, value));
+        self.call_tauri("setPermission", (name, value));
     }
 
     fn close_success(&self) {
-        // TODO:
-        // self.call2("closeSuccess", &make_args!());
+        self.call_tauri("closeSuccess", ());
     }
 
     fn update_quality_status(&self, status: QualityStatus) {
-        // TODO:
         self.call_tauri(
             "updateQualityStatus",
             (
@@ -143,27 +129,27 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn set_cursor_id(&self, id: String) {
-        self.call("setCursorId", &make_args!(id));
+        self.call_tauri("setCursorId", (id));
     }
 
     fn set_cursor_position(&self, cp: CursorPosition) {
-        self.call("setCursorPosition", &make_args!(cp.x, cp.y));
+        self.call_tauri("setCursorPosition", (cp.x, cp.y));
     }
 
     fn set_connection_type(&self, is_secured: bool, direct: bool) {
-        self.call("setConnectionType", &make_args!(is_secured, direct));
+        self.call_tauri("setConnectionType", (is_secured, direct));
     }
 
     fn job_error(&self, id: i32, err: String, file_num: i32) {
-        self.call("jobError", &make_args!(id, err, file_num));
+        self.call_tauri("jobError", (id, err, file_num));
     }
 
     fn job_done(&self, id: i32, file_num: i32) {
-        self.call("jobDone", &make_args!(id, file_num));
+        self.call_tauri("jobDone", (id, file_num));
     }
 
     fn clear_all_jobs(&self) {
-        self.call("clearAllJobs", &make_args!());
+        self.call_tauri("clearAllJobs", ());
     }
 
     fn load_last_job(&self, cnt: i32, job_json: &str) {
@@ -178,9 +164,9 @@ impl InvokeUiSession for SciterHandler {
                 path = job.to.clone();
                 to = job.remote.clone();
             }
-            self.call(
+            self.call_tauri(
                 "addJob",
-                &make_args!(cnt, path, to, job.file_num, job.show_hidden, job.is_remote),
+                (cnt, path, to, job.file_num, job.show_hidden, job.is_remote),
             );
         }
     }
@@ -199,29 +185,29 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn update_transfer_list(&self) {
-        self.call("updateTransferList", &make_args!());
+        self.call_tauri("updateTransferList",());
     }
 
     fn confirm_delete_files(&self, id: i32, i: i32, name: String) {
-        self.call("confirmDeleteFiles", &make_args!(id, i, name));
+        self.call_tauri("confirmDeleteFiles", (id, i, name));
     }
 
     fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool) {
-        self.call(
+        self.call_tauri(
             "overrideFileConfirm",
-            &make_args!(id, file_num, to, is_upload),
+            (id, file_num, to, is_upload),
         );
     }
 
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64) {
-        self.call(
+        self.call_tauri(
             "jobProgress",
-            &make_args!(id, file_num, speed, finished_size),
+            (id, file_num, speed, finished_size),
         );
     }
 
     fn adapt_size(&self) {
-        self.call("adaptSize", &make_args!());
+        self.call_tauri("adaptSize", ());
     }
 
     // fn on_rgba(&self, data: &[u8]) {
@@ -263,19 +249,19 @@ impl InvokeUiSession for SciterHandler {
     }
     
     fn cancel_msgbox(&self, tag: &str) {
-        self.call("cancel_msgbox", &make_args!(tag));
+        self.call_tauri("cancel_msgbox", (tag));
     }
 
     fn new_message(&self, msg: String) {
-        self.call("newMessage", &make_args!(msg));
+        self.call_tauri("newMessage", (msg));
     }
 
     fn switch_display(&self, display: &SwitchDisplay) {
-        self.call("switchDisplay", &make_args!(display.display));
+        self.call_tauri("switchDisplay", (display.display));
     }
 
     fn update_block_input_state(&self, on: bool) {
-        self.call("updateBlockInputState", &make_args!(on));
+        self.call_tauri("updateBlockInputState",(on));
     }
 }
 
