@@ -244,24 +244,23 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
-        // TODO:
         self.call_tauri("msgbox_retry", (msgtype, title, text, link, retry));
     }
     
     fn cancel_msgbox(&self, tag: &str) {
-        self.call_tauri("cancel_msgbox", (tag));
+        self.call_tauri("cancel_msgbox", tag);
     }
 
     fn new_message(&self, msg: String) {
-        self.call_tauri("newMessage", (msg));
+        self.call_tauri("newMessage", msg);
     }
 
     fn switch_display(&self, display: &SwitchDisplay) {
-        self.call_tauri("switchDisplay", (display.display));
+        self.call_tauri("switchDisplay", display.display);
     }
 
     fn update_block_input_state(&self, on: bool) {
-        self.call_tauri("updateBlockInputState",(on));
+        self.call_tauri("updateBlockInputState",on);
     }
 }
 
