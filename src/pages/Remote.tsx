@@ -8,6 +8,7 @@ import { listen } from '@tauri-apps/api/event'
 const Remote = () => {
     const [connectionLoading, setConnecitonLoading] = useState(true)
     const [msg, setMsg] = useState("")
+    const [connectionSpeed, setConnectionSpeed] = useState("")
 
     const [remoteDim, setRemoteDim] = useState({ width: 0, height: 0 })
     const [pixels, setPixels] = useState<Uint8ClampedArray>(new Uint8ClampedArray([0]))
@@ -23,7 +24,6 @@ const Remote = () => {
                     status: string, statusMsg: string, connectionMsg: string, idkMsg: string, idkBool: boolean
                 ]
                 }) => {
-                    console.log(e)
                     const status = e.payload[0]
                     if (status === 'success') {
                         setConnecitonLoading(false)
@@ -37,7 +37,11 @@ const Remote = () => {
             const unlistenNativeRemote = await listen('native-remote', (e: { payload: Uint8ClampedArray }) => {
                     setPixels(new Uint8ClampedArray(e.payload))
                 })
-            return {unlistenSetDisplay, unlistenNativeRemote, unlistenMsgboxRetry}
+            const unlistenUpdateQualityStatus = await listen('updateQualityStatus', (e: {payload: string[]}) => {
+                    setConnectionSpeed(e.payload[0])
+                })
+
+            return {unlistenSetDisplay, unlistenNativeRemote, unlistenMsgboxRetry, unlistenUpdateQualityStatus}
         }
 
         const unlisten = listenEvents().catch(() => null)
@@ -48,6 +52,7 @@ const Remote = () => {
                   unl.unlistenNativeRemote()
                   unl.unlistenSetDisplay()
                   unl.unlistenMsgboxRetry()
+                  unl.unlistenUpdateQualityStatus()
               } 
            }) 
         }
@@ -69,6 +74,7 @@ const Remote = () => {
     
     return (
         <Center h="100vh">
+            <Text pos='absolute' left={0} top={0} color='red'>{connectionSpeed}</Text>
             <Box>
                 {connectionLoading ?
                     <>"Подключаемся..."<CircularProgress isIndeterminate/></> :

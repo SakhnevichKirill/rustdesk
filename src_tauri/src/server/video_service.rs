@@ -500,7 +500,7 @@ fn run(sp: GenericService) -> ResultType<()> {
 
         let mut video_qos = VIDEO_QOS.lock().unwrap();
         if video_qos.check_if_updated() {
-            log::debug!(
+            log::info!(
                 "qos is updated, target_bitrate:{}, fps:{}",
                 video_qos.target_bitrate,
                 video_qos.fps
