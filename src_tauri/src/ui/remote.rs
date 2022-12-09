@@ -128,18 +128,18 @@ impl InvokeUiSession for SciterHandler {
 
     fn update_quality_status(&self, status: QualityStatus) {
         // TODO:
-        // self.call2(
-        //     "updateQualityStatus",
-        //     &make_args!(
-        //         status.speed.map_or(Value::null(), |it| it.into()),
-        //         status.fps.map_or(Value::null(), |it| it.into()),
-        //         status.delay.map_or(Value::null(), |it| it.into()),
-        //         status.target_bitrate.map_or(Value::null(), |it| it.into()),
-        //         status
-        //             .codec_format
-        //             .map_or(Value::null(), |it| it.to_string().into())
-        //     ),
-        // );
+        self.call_tauri(
+            "updateQualityStatus",
+            (
+                status.speed.map_or("".to_string(), |it| it.into()),
+                status.fps.map_or(0, |it| it.into()),
+                status.delay.map_or(0, |it| it.into()),
+                status.target_bitrate.map_or(0, |it| it.into()),
+                status
+                    .codec_format
+                    .map_or("".to_string(), |it| it.to_string().into())
+            ),
+        );
     }
 
     fn set_cursor_id(&self, id: String) {
