@@ -7,12 +7,12 @@ Motivation: lets create a web version of [RUSTDESK](https://github.com/rustdesk/
 ## Install
 `yarn`
 
-go to `./src-tauri/README.md`
+go to `./src_tauri/README.md`
 
 ## Start
 `yarn start`
 
-`cd src-tauri`
+`cd src_tauri`
 
 `cargo tauri dev`
 
