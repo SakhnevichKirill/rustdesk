@@ -143,7 +143,7 @@ glib = "0.16.5"
 flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge" }
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/simple_rc", "libs/portable"]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/simple_rc", "libs/portable"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2022 Purslane, Inc."

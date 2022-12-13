@@ -1605,18 +1605,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bd4b30a6560bbd9b4620f4de34c3f14f60848e58a9b7216801afcb4c7b31c3c"
 
 [[package]]
-name = "dylib_virtual_display"
-version = "0.1.0"
-dependencies = [
- "cc",
- "hbb_common",
- "lazy_static",
- "serde 1.0.147",
- "serde_derive",
- "thiserror",
-]
-
-[[package]]
 name = "ed25519"
 version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7134,9 +7122,12 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "virtual_display"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "hbb_common",
  "lazy_static",
- "libloading",
+ "serde 1.0.147",
+ "serde_derive",
+ "thiserror",
 ]
 
 [[package]]

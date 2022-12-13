@@ -28,7 +28,6 @@ fn main() {
     if !common::global_init() {
         return;
     }
-    println!("{}", !has_feature("custom-protocol"));
     let mut builder = tauri::Builder::default();
     builder = invoke_handler(builder);
     builder
