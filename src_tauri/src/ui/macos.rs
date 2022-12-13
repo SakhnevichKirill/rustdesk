@@ -11,7 +11,7 @@ use objc::{
     runtime::{Object, Sel, BOOL},
     sel, sel_impl,
 };
-use sciter::{make_args, Host};
+// use sciter::{make_args, Host};
 use std::{ffi::c_void, rc::Rc};
 use dark_light;
 

@@ -4,7 +4,7 @@ use crate::ui_cm_interface::{start_ipc, ConnectionManager, InvokeUiCM};
 use tauri::Manager;
 
 use hbb_common::{allow_err, log};
-use sciter::{make_args, Element, Value, HELEMENT};
+// use sciter::{make_args, Element, Value, HELEMENT};
 use std::sync::Mutex;
 use std::{ops::Deref, sync::Arc};
 
@@ -16,18 +16,18 @@ pub struct TauriHandler;
 
 impl InvokeUiCM for TauriHandler {
     fn add_connection(&self, client: &crate::ui_cm_interface::Client) {
-        self.call_tauri("add_connection", client);
+        self.call_tauri("addConnection", client);
     }
 
     fn remove_connection(&self, id: i32, close: bool) {
-        // self.call("removeConnection", &make_args!(id, close));
+        self.call_tauri("removeConnection", (id, close));
         if crate::ui_cm_interface::get_clients_length().eq(&0) {
             crate::platform::quit_gui();
         }
     }
 
     fn new_message(&self, id: i32, text: String) {
-        // self.call("newMessage", &make_args!(id, text));
+        self.call_tauri("newMessage", (id, text));
     }
 
     fn change_theme(&self, _dark: String) {
@@ -39,7 +39,7 @@ impl InvokeUiCM for TauriHandler {
     }
 
     fn show_elevation(&self, show: bool) {
-        // self.call("showElevation", &make_args!(show));
+        self.call_tauri("showElevation", (id, text));
     }
 }
 
@@ -134,24 +134,18 @@ impl TauriConnectionManager {
     }
 }
 
-impl sciter::EventHandler for TauriConnectionManager {
-    // fn attached(&mut self, root: HELEMENT) {
-    //     *self.ui_handler.element.lock().unwrap() = Some(Element::from(root));
-    // }
-
-    sciter::dispatch_script_call! {
-        fn t(String);
-        fn check_click_time(i32);
-        fn get_click_time();
-        fn get_icon();
-        fn close(i32);
-        fn remove_disconnected_connection(i32);
-        fn quit();
-        fn authorize(i32);
-        fn switch_permission(i32, String, bool);
-        fn send_msg(i32, String);
-        fn can_elevate();
-        fn elevate_portable(i32);
-        fn get_option(String);
-    }
-}
+// sciter::dispatch_script_call! {
+//     fn t(String);
+//     fn check_click_time(i32);
+//     fn get_click_time();
+//     fn get_icon();
+//     fn close(i32);
+//     fn remove_disconnected_connection(i32);
+//     fn quit();
+//     fn authorize(i32);
+//     fn switch_permission(i32, String, bool);
+//     fn send_msg(i32, String);
+//     fn can_elevate();
+//     fn elevate_portable(i32);
+//     fn get_option(String);
+// }
