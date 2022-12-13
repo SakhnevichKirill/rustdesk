@@ -75,10 +75,10 @@ const Remote = () => {
     return (
         <Center h="100vh">
             <Text pos='absolute' left={0} top={0} color='red'>{connectionSpeed}</Text>
-            <Box>
+            <Box height='100%'>
                 {connectionLoading ?
-                    <>"Подключаемся..."<CircularProgress isIndeterminate/></> :
-                    <canvas id="canvas" {...remoteDim}></canvas>
+                    <>"Подключаемся... "<CircularProgress isIndeterminate/></> :
+                    <canvas id="canvas" width={1690} height={1122}></canvas>
                 }
                 <Text>{msg}</Text>
             </Box>
