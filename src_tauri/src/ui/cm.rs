@@ -39,7 +39,7 @@ impl InvokeUiCM for TauriHandler {
     }
 
     fn show_elevation(&self, show: bool) {
-        self.call_tauri("showElevation", (id, text));
+        self.call_tauri("showElevation", show);
     }
 }
 
