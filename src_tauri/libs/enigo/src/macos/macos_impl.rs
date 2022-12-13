@@ -163,6 +163,14 @@ impl Default for Enigo {
 }
 
 impl MouseControllable for Enigo {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
     fn mouse_move_to(&mut self, x: i32, y: i32) {
         let pressed = Self::pressed_buttons();
 
@@ -319,6 +327,14 @@ impl MouseControllable for Enigo {
 // com/questions/1918841/how-to-convert-ascii-character-to-cgkeycode
 
 impl KeyboardControllable for Enigo {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+    
     fn key_sequence(&mut self, sequence: &str) {
         // NOTE(dustin): This is a fix for issue https://github.com/enigo-rs/enigo/issues/68
         // TODO(dustin): This could be improved by aggregating 20 bytes worth of graphemes at a time
@@ -579,6 +595,63 @@ impl Enigo {
             '`' => kVK_ANSI_Grave,
             _ => u16::MAX,
         }
+    }
+
+    #[inline]
+    fn mouse_scroll_impl(&mut self, length: i32, is_track_pad: bool, is_horizontal: bool) {
+        let mut scroll_direction = -1; // 1 left -1 right;
+        let mut length = length;
+
+        if length < 0 {
+            length *= -1;
+            scroll_direction *= -1;
+        }
+
+        // fix scroll distance for track pad
+        if is_track_pad {
+            length *= 3;
+        }
+
+        if let Some(src) = self.event_source.as_ref() {
+            for _ in 0..length {
+                unsafe {
+                    let units = if is_track_pad {
+                        ScrollUnit::Pixel
+                    } else {
+                        ScrollUnit::Line
+                    };
+                    let mouse_ev = if is_horizontal {
+                        CGEventCreateScrollWheelEvent(
+                            &src,
+                            units,
+                            2, // CGWheelCount 1 = y 2 = xy 3 = xyz
+                            0,
+                            scroll_direction,
+                        )
+                    } else {
+                        CGEventCreateScrollWheelEvent(
+                            &src,
+                            units,
+                            1, // CGWheelCount 1 = y 2 = xy 3 = xyz
+                            scroll_direction,
+                        )
+                    };
+
+                    CGEventPost(CGEventTapLocation::HID, mouse_ev);
+                    CFRelease(mouse_ev as *const std::ffi::c_void);
+                }
+            }
+        }
+    }
+
+    /// handle scroll vertically
+    pub fn mouse_scroll_y(&mut self, length: i32, is_track_pad: bool) {
+        self.mouse_scroll_impl(length, is_track_pad, false)
+    }
+
+    /// handle scroll horizontally
+    pub fn mouse_scroll_x(&mut self, length: i32, is_track_pad: bool) {
+        self.mouse_scroll_impl(length, is_track_pad, true)
     }
 }
 

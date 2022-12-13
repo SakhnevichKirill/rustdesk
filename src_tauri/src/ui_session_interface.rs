@@ -2,7 +2,7 @@ use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay, input_os_password,
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
-    QualityStatus, KEY_MAP, 
+    QualityStatus, KEY_MAP,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::client::{get_key_state, SERVER_KEYBOARD_ENABLED};
@@ -28,13 +28,13 @@ pub static IS_IN: AtomicBool = AtomicBool::new(false);
 pub static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 pub static HOTKEY_HOOKED: AtomicBool = AtomicBool::new(false);
 #[cfg(windows)]
-pub static mut IS_ALT_GR: bool = false;
+static mut IS_ALT_GR: bool = false;
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::flutter::FlutterHandler;
 
 lazy_static::lazy_static! {
-    pub static ref TO_RELEASE: Arc<Mutex<HashSet<RdevKey>>> = Arc::new(Mutex::new(HashSet::<RdevKey>::new()));
+    static ref TO_RELEASE: Arc<Mutex<HashSet<RdevKey>>> = Arc::new(Mutex::new(HashSet::<RdevKey>::new()));
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -200,6 +200,7 @@ impl<T: InvokeUiSession> Session<T> {
             h265 = h265 && encoding_265;
             return (h264, h265);
         }
+        #[allow(unreachable_code)]
         (false, false)
     }
 
@@ -512,7 +513,7 @@ impl<T: InvokeUiSession> Session<T> {
         let ctrl = get_key_state(enigo::Key::Control) || get_key_state(enigo::Key::RightControl);
         let shift = get_key_state(enigo::Key::Shift) || get_key_state(enigo::Key::RightShift);
         #[cfg(windows)]
-        let command = crate::platform::windows_lib::get_win_key_state();
+        let command = crate::platform::windows::get_win_key_state();
         #[cfg(not(windows))]
         let command = get_key_state(enigo::Key::Meta);
         let control_key = match key {
@@ -803,7 +804,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.grab_hotkeys(true);
 
         #[cfg(windows)]
-        crate::platform::windows_lib::stop_system_key_propagate(true);
+        crate::platform::windows::stop_system_key_propagate(true);
     }
 
     pub fn leave(&self) {
@@ -815,7 +816,7 @@ impl<T: InvokeUiSession> Session<T> {
             self.map_keyboard_mode(false, *key, None)
         }
         #[cfg(windows)]
-        crate::platform::windows_lib::stop_system_key_propagate(false);
+        crate::platform::windows::stop_system_key_propagate(false);
     }
 
     #[cfg(target_os = "linux")]
@@ -973,7 +974,7 @@ impl<T: InvokeUiSession> Session<T> {
         let mut command = command;
         #[cfg(windows)]
         {
-            if !command && crate::platform::windows_lib::get_win_key_state() {
+            if !command && crate::platform::windows::get_win_key_state() {
                 command = true;
             }
         }
@@ -1097,7 +1098,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_cursor_data(&self, cd: CursorData);
     fn set_cursor_id(&self, id: String);
     fn set_cursor_position(&self, cp: CursorPosition);
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32);
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embeded: bool);
     fn switch_display(&self, display: &SwitchDisplay);
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
     fn update_privacy_mode(&self);
@@ -1210,7 +1211,13 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 input_os_password(p, true, self.clone());
             }
             let current = &pi.displays[pi.current_display as usize];
-            self.set_display(current.x, current.y, current.width, current.height);
+            self.set_display(
+                current.x,
+                current.y,
+                current.width,
+                current.height,
+                current.cursor_embeded,
+            );
         }
         self.update_privacy_mode();
         // Save recent peers, then push event to flutter. So flutter can refresh peer page.
@@ -1233,7 +1240,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             let path = path.with_extension(crate::get_app_name().to_lowercase());
             std::fs::File::create(&path).ok();
             if let Some(path) = path.to_str() {
-                crate::platform::windows_lib::add_recent_document(&path);
+                crate::platform::windows::add_recent_document(&path);
             }
         }
         // only run in sciter
@@ -1359,7 +1366,7 @@ impl<T: InvokeUiSession> Session<T> {
         });
     }
 
-    #[allow(dead_code)]    
+    #[allow(dead_code)]
     fn start_keyboard_hook(&self) {
         // only run in sciter
         if self.is_port_forward() || self.is_file_transfer() {
@@ -1372,7 +1379,7 @@ impl<T: InvokeUiSession> Session<T> {
 
         let me = self.clone();
         #[cfg(windows)]
-        crate::platform::windows_lib::enable_lowlevel_keyboard(std::ptr::null_mut() as _);
+        crate::platform::windows::enable_lowlevel_keyboard(std::ptr::null_mut() as _);
         std::thread::spawn(move || {
             // This will block.
             std::env::set_var("KEYBOARD_ONLY", "y");
@@ -1394,8 +1401,8 @@ impl<T: InvokeUiSession> Session<T> {
                 me.key_down_or_up(down, key, evt);
             };
             /* todo!: Shift + a -> AA in sciter
-            * rdev::listen and rdev::grab both send a
-            */
+             * rdev::listen and rdev::grab both send a
+             */
             if let Err(error) = rdev::listen(func) {
                 log::error!("rdev: {:?}", error);
             }
@@ -1562,7 +1569,7 @@ fn get_hotkey_state(key: RdevKey) -> bool {
     }
 }
 
-pub fn get_all_hotkey_state(
+fn get_all_hotkey_state(
     alt: bool,
     ctrl: bool,
     shift: bool,
@@ -1636,7 +1643,7 @@ pub fn global_save_keyboard_mode(value: String) {
     std::env::set_var("KEYBOARD_MODE", value);
 }
 
-pub fn is_long_press(event: &Event) -> bool {
+fn is_long_press(event: &Event) -> bool {
     let mut keys = MUTEX_SPECIAL_KEYS.lock().unwrap();
     match event.event_type {
         EventType::KeyPress(k) => {

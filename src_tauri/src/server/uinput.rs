@@ -4,7 +4,7 @@ use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
     AttributeSet, EventType, InputEvent,
 };
-use hbb_common::{allow_err, bail, log, tokio, ResultType};
+use hbb_common::{allow_err, bail, log, tokio::{self, runtime::Runtime}, ResultType};
 
 static IPC_CONN_TIMEOUT: u64 = 1000;
 static IPC_REQUEST_TIMEOUT: u64 = 1000;
@@ -17,24 +17,24 @@ pub mod client {
 
     pub struct UInputKeyboard {
         conn: Connection,
+        rt: Runtime,
     }
 
     impl UInputKeyboard {
         pub async fn new() -> ResultType<Self> {
             let conn = ipc::connect(IPC_CONN_TIMEOUT, IPC_POSTFIX_KEYBOARD).await?;
-            Ok(Self { conn })
+            let rt = Runtime::new()?;
+            Ok(Self { conn, rt })
         }
 
-        #[tokio::main(flavor = "current_thread")]
-        async fn send(&mut self, data: Data) -> ResultType<()> {
-            self.conn.send(&data).await
+        fn send(&mut self, data: Data) -> ResultType<()> {
+            self.rt.block_on(self.conn.send(&data))
         }
 
-        #[tokio::main(flavor = "current_thread")]
-        async fn send_get_key_state(&mut self, data: Data) -> ResultType<bool> {
-            self.conn.send(&data).await?;
+        fn send_get_key_state(&mut self, data: Data) -> ResultType<bool> {
+            self.rt.block_on(self.conn.send(&data))?;
 
-            match self.conn.next_timeout(IPC_REQUEST_TIMEOUT).await {
+            match self.rt.block_on(self.conn.next_timeout(IPC_REQUEST_TIMEOUT)) {
                 Ok(Some(Data::KeyboardResponse(ipc::DataKeyboardResponse::GetKeyState(state)))) => {
                     Ok(state)
                 }
@@ -63,6 +63,14 @@ pub mod client {
     }
 
     impl KeyboardControllable for UInputKeyboard {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+
         fn get_key_state(&mut self, key: Key) -> bool {
             match self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(key))) {
                 Ok(state) => state,
@@ -93,21 +101,34 @@ pub mod client {
 
     pub struct UInputMouse {
         conn: Connection,
+        rt: Runtime,
     }
 
     impl UInputMouse {
         pub async fn new() -> ResultType<Self> {
             let conn = ipc::connect(IPC_CONN_TIMEOUT, IPC_POSTFIX_MOUSE).await?;
-            Ok(Self { conn })
+            let rt = Runtime::new()?;
+            Ok(Self { conn, rt })
         }
 
-        #[tokio::main(flavor = "current_thread")]
-        async fn send(&mut self, data: Data) -> ResultType<()> {
-            self.conn.send(&data).await
+        fn send(&mut self, data: Data) -> ResultType<()> {
+            self.rt.block_on(self.conn.send(&data))
+        }
+
+        pub fn send_refresh(&mut self) -> ResultType<()> {
+            self.send(Data::Mouse(DataMouse::Refresh))
         }
     }
 
     impl MouseControllable for UInputMouse {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+
         fn mouse_move_to(&mut self, x: i32, y: i32) {
             allow_err!(self.send(Data::Mouse(DataMouse::MoveTo(x, y))));
         }
@@ -492,6 +513,9 @@ pub mod service {
                     allow_err!(mouse.scroll_wheel(&scroll))
                 }
             }
+            DataMouse::Refresh => {
+                // unreachable!()
+            }
         }
     }
 
@@ -562,7 +586,27 @@ pub mod service {
                             Ok(Some(data)) => {
                                 match data {
                                     Data::Mouse(data) => {
-                                        handle_mouse(&mut mouse, &data);
+                                        if let DataMouse::Refresh = data {
+                                            let resolution = RESOLUTION.lock().unwrap();
+                                            let rng_x = resolution.0.clone();
+                                            let rng_y = resolution.1.clone();
+                                            log::info!(
+                                                "Refresh uinput mouce with rng_x: ({}, {}), rng_y: ({}, {})",
+                                                rng_x.0,
+                                                rng_x.1,
+                                                rng_y.0,
+                                                rng_y.1
+                                            );
+                                            mouse = match mouce::Mouse::new_uinput(rng_x, rng_y) {
+                                                Ok(mouse) => mouse,
+                                                Err(e) => {
+                                                    log::error!("Failed to create mouse, {}", e);
+                                                    return;
+                                                }
+                                            }
+                                        } else {
+                                            handle_mouse(&mut mouse, &data);
+                                        }
                                     }
                                     _ => {
                                     }

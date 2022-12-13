@@ -219,24 +219,50 @@ lazy_static::lazy_static! {
     static ref IS_SERVER: bool =  std::env::args().nth(1) == Some("--server".to_owned());
 }
 
+// First call set_uinput() will create keyboard and mouse clients.
+// The clients are ipc connections that must live shorter than tokio runtime.
+// Thus this funtion must not be called in a temporary runtime.
 #[cfg(target_os = "linux")]
-pub async fn set_uinput() -> ResultType<()> {
+pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     // Keyboard and mouse both open /dev/uinput
     // TODO: Make sure there's no race
+    set_uinput_resolution(minx, maxx, miny, maxy).await?;
+
     let keyboard = super::uinput::client::UInputKeyboard::new().await?;
     log::info!("UInput keyboard created");
     let mouse = super::uinput::client::UInputMouse::new().await?;
     log::info!("UInput mouse created");
 
-    let xxx = ENIGO.lock();
-    let mut en = xxx.unwrap();
-    en.set_uinput_keyboard(Some(Box::new(keyboard)));
-    en.set_uinput_mouse(Some(Box::new(mouse)));
+    ENIGO
+        .lock()
+        .unwrap()
+        .set_custom_keyboard(Box::new(keyboard));
+    ENIGO.lock().unwrap().set_custom_mouse(Box::new(mouse));
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
-pub async fn set_uinput_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
+pub async fn update_mouse_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
+    set_uinput_resolution(minx, maxx, miny, maxy).await?;
+
+    std::thread::spawn(|| {
+        if let Some(mouse) = ENIGO.lock().unwrap().get_custom_mouse() {
+            if let Some(mouse) = mouse
+                .as_mut_any()
+                .downcast_mut::<super::uinput::client::UInputMouse>()
+            {
+                allow_err!(mouse.send_refresh());
+            } else {
+                log::error!("failed downcast uinput mouse");
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+async fn set_uinput_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     super::uinput::client::set_resolution(minx, maxx, miny, maxy).await
 }
 
@@ -248,7 +274,7 @@ pub fn is_left_up(evt: &MouseEvent) -> bool {
 
 #[cfg(windows)]
 pub fn mouse_move_relative(x: i32, y: i32) {
-    crate::platform::windows_lib::try_change_desktop();
+    crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
     en.mouse_move_relative(x, y);
 }
@@ -460,7 +486,7 @@ pub fn handle_mouse_(evt: &MouseEvent) {
     }
 
     #[cfg(windows)]
-    crate::platform::windows_lib::try_change_desktop();
+    crate::platform::windows::try_change_desktop();
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & 0x7;
     let mut en = ENIGO.lock().unwrap();
@@ -513,7 +539,7 @@ pub fn handle_mouse_(evt: &MouseEvent) {
             }
             _ => {}
         },
-        3 => {
+        3 | 4 => {
             #[allow(unused_mut)]
             let mut x = evt.x;
             #[allow(unused_mut)]
@@ -523,21 +549,39 @@ pub fn handle_mouse_(evt: &MouseEvent) {
                 x = -x;
                 y = -y;
             }
-
-            // fix shift + scroll(down/up)
             #[cfg(target_os = "macos")]
-            if evt
-                .modifiers
-                .contains(&EnumOrUnknown::new(ControlKey::Shift))
             {
-                x = y;
-                y = 0;
+                // TODO: support track pad on win.
+                let is_track_pad = evt
+                    .modifiers
+                    .contains(&EnumOrUnknown::new(ControlKey::Scroll));
+
+                // fix shift + scroll(down/up)
+                if !is_track_pad
+                    && evt
+                        .modifiers
+                        .contains(&EnumOrUnknown::new(ControlKey::Shift))
+                {
+                    x = y;
+                    y = 0;
+                }
+
+                if x != 0 {
+                    en.mouse_scroll_x(x, is_track_pad);
+                }
+                if y != 0 {
+                    en.mouse_scroll_y(y, is_track_pad);
+                }
             }
-            if x != 0 {
-                en.mouse_scroll_x(x);
-            }
-            if y != 0 {
-                en.mouse_scroll_y(y);
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                if x != 0 {
+                    en.mouse_scroll_x(x);
+                }
+                if y != 0 {
+                    en.mouse_scroll_y(y);
+                }
             }
         }
         _ => {}
@@ -772,7 +816,7 @@ fn sync_status(evt: &KeyEvent) -> (bool, bool) {
 fn map_keyboard_mode(evt: &KeyEvent) {
     // map mode(1): Send keycode according to the peer platform.
     #[cfg(windows)]
-    crate::platform::windows_lib::try_change_desktop();
+    crate::platform::windows::try_change_desktop();
 
     let (click_capslock, click_numlock) = sync_status(evt);
 
@@ -822,7 +866,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     let (click_capslock, click_numlock) = sync_status(evt);
 
     #[cfg(windows)]
-    crate::platform::windows_lib::try_change_desktop();
+    crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
     if click_capslock {
         en.key_click(Key::CapsLock);

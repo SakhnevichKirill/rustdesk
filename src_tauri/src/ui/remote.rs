@@ -88,8 +88,8 @@ impl InvokeUiSession for SciterHandler {
         }
     }
 
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
-        self.call_tauri("setDisplay", (x, y, w, h));
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, _cursor_embeded: bool) {
+        self.call_tauri("setDisplay", (x, y, w, h, _cursor_embeded));
         //     // https://sciter.com/forums/topic/color_spaceiyuv-crash
         //     // Nothing spectacular in decoder – done on CPU side.
         //     // So if you can do BGRA translation on your side – the better.
@@ -210,16 +210,13 @@ impl InvokeUiSession for SciterHandler {
         self.call_tauri("adaptSize", ());
     }
 
-    // fn on_rgba(&self, data: &[u8]) {
-    //     VIDEO
-    //         .lock()
-    //         .unwrap()
-    //         .as_mut()
-    //         .map(|v| v.render_frame(data).ok());
-    // }
-
     fn on_rgba(&self, data: &[u8]) {
         self.call_tauri("native-remote", data);
+        // VIDEO
+        //     .lock()
+        //     .unwrap()
+        //     .as_mut()
+        //     .map(|v| v.render_frame(data).ok());
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
@@ -236,6 +233,7 @@ impl InvokeUiSession for SciterHandler {
             display.set_item("y", d.y);
             display.set_item("width", d.width);
             display.set_item("height", d.height);
+            display.set_item("cursor_embeded", d.cursor_embeded);
             displays.push(display);
         }
         pi_sciter.set_item("displays", displays);
@@ -618,7 +616,6 @@ impl TauriSession {
             log::error!("Failed to spawn IP tunneling: {}", err);
         }
     }
-
 }
 
 pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {

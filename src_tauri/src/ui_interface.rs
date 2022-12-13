@@ -22,7 +22,6 @@ use hbb_common::{
     protobuf::Message as _,
     rendezvous_proto::*,
     tcp::FramedStream,
-    tokio::{self, sync::mpsc, time},
 };
 
 #[cfg(feature = "flutter")]
@@ -41,6 +40,7 @@ lazy_static::lazy_static! {
     static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
     static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
+    pub static ref OPTION_SYNCED : Arc<Mutex<bool>> = Default::default();
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -91,7 +91,7 @@ pub fn goto_install() {
 pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) {
     #[cfg(windows)]
     std::thread::spawn(move || {
-        allow_err!(crate::platform::windows_lib::install_me(
+        allow_err!(crate::platform::windows::install_me(
             &_options, _path, _silent, _debug
         ));
         std::process::exit(0);
@@ -149,7 +149,7 @@ pub fn show_run_without_install() -> bool {
 #[tauri::command(async)]
 pub fn has_rendezvous_service() -> bool {
     #[cfg(all(windows, feature = "hbbs"))]
-    return crate::platform::is_win_server() && crate::platform::windows_lib::get_license().is_some();
+    return crate::platform::is_win_server() && crate::platform::windows::get_license().is_some();
     return false;
 }
 
@@ -157,7 +157,7 @@ pub fn has_rendezvous_service() -> bool {
 #[tauri::command(async)]
 pub fn get_license() -> String {
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows_lib::get_license() {
+    if let Some(lic) = crate::platform::windows::get_license() {
         #[cfg(feature = "flutter")]
         return format!("Key: {}\nHost: {}\nApi: {}", lic.key, lic.host, lic.api);
         // default license format is html formed (sciter)
@@ -356,7 +356,7 @@ pub fn set_option(key: String, value: String) {
 #[tauri::command(async)]
 pub fn install_path() -> String {
     #[cfg(windows)]
-    return crate::platform::windows_lib::get_install_info().1;
+    return crate::platform::windows::get_install_info().1;
     #[cfg(not(windows))]
     return "".to_owned();
 }
@@ -399,7 +399,7 @@ pub fn set_socks(proxy: String, username: String, password: String) {
 #[tauri::command(async)]
 pub fn is_installed() -> bool {
     crate::platform::is_installed()
-    }
+}
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[inline]
@@ -411,7 +411,7 @@ pub fn is_installed() -> bool {
 #[tauri::command(async)]
 pub fn is_rdp_service_open() -> bool {
     #[cfg(windows)]
-    return is_installed() && crate::platform::windows_lib::is_rdp_service_open();
+    return is_installed() && crate::platform::windows::is_rdp_service_open();
     #[cfg(not(windows))]
     return false;
 }
@@ -420,7 +420,7 @@ pub fn is_rdp_service_open() -> bool {
 #[tauri::command(async)]
 pub fn is_share_rdp() -> bool {
     #[cfg(windows)]
-    return crate::platform::windows_lib::is_share_rdp();
+    return crate::platform::windows::is_share_rdp();
     #[cfg(not(windows))]
     return false;
 }
@@ -429,7 +429,7 @@ pub fn is_share_rdp() -> bool {
 #[tauri::command(async)]
 pub fn set_share_rdp(_enable: bool) {
     #[cfg(windows)]
-    crate::platform::windows_lib::set_share_rdp(_enable);
+    crate::platform::windows::set_share_rdp(_enable);
 }
 
 #[inline]
@@ -439,7 +439,7 @@ pub fn is_installed_lower_version() -> bool {
     return false;
     #[cfg(windows)]
     {
-        let installed_version = crate::platform::windows_lib::get_installed_version();
+        let installed_version = crate::platform::windows::get_installed_version();
         let a = hbb_common::get_version_number(crate::VERSION);
         let b = hbb_common::get_version_number(&installed_version);
         return a > b;
@@ -567,7 +567,7 @@ pub fn remove_peer(id: String) {
 
 #[inline]
 #[tauri::command(async)]
-pub fn new_remote(app: tauri::AppHandle, id: String, remote_type: String) {
+pub fn new_remote(id: String, remote_type: String) {
     let mut lock = CHILDREN.lock().unwrap();
     let args = vec![format!("--{}", remote_type), id.clone()];
     let key = (id.clone(), remote_type.clone());
@@ -594,23 +594,6 @@ pub fn new_remote(app: tauri::AppHandle, id: String, remote_type: String) {
         }
     }
 }
-
-// #[inline]
-// #[tauri::command(async)]
-// pub fn new_remote_tauri(app: tauri::AppHandle, id: String, remote_type: String) {
-//     let mut lock = CHILDREN.lock().unwrap();
-//     let args = vec![format!("--{}", remote_type), id.clone()];
-//     let key = (id.clone(), remote_type.clone());
-//     if let Some(remote) = lock.1.get_mut(&key) {
-//         remote.close();
-//         lock.1.remove(&key);
-
-//     }
-//     // TODO: how to stop process?
-//     lock.1.insert(key, _);
-//     ui::start(&app, &mut args);
-// }
-
 
 #[inline]
 #[tauri::command(async)]
@@ -752,7 +735,7 @@ pub fn get_software_store_path() -> String {
 #[tauri::command(async)]
 pub fn create_shortcut(_id: String) {
     #[cfg(windows)]
-    crate::platform::windows_lib::create_shortcut(&_id).ok();
+    crate::platform::windows::create_shortcut(&_id).ok();
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
@@ -761,6 +744,20 @@ pub fn discover() {
     std::thread::spawn(move || {
         allow_err!(crate::lan::discover());
     });
+}
+
+#[cfg(feature = "flutter")]
+pub fn peer_to_map(id: String, p: PeerConfig) -> HashMap<&'static str, String> {
+    HashMap::<&str, String>::from_iter([
+        ("id", id),
+        ("username", p.info.username.clone()),
+        ("hostname", p.info.hostname.clone()),
+        ("platform", p.info.platform.clone()),
+        (
+            "alias",
+            p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
+        ),
+    ])
 }
 
 #[inline]
@@ -966,7 +963,15 @@ pub fn check_zombie(children: Children) {
     }
 }
 
-pub(crate) fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
+pub fn start_option_status_sync() {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let _sender = SENDER.lock().unwrap();
+    }
+}
+
+// not call directly
+fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     std::thread::spawn(move || check_connect_status_(reconnect, rx));
     tx
@@ -990,7 +995,7 @@ pub fn account_auth_result() -> String {
 // notice: avoiding create ipc connecton repeatly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
-pub(crate) async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
+async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
     let mut key_confirmed = false;
     let mut rx = rx;
     let mut mouse_time = 0;
@@ -1011,7 +1016,8 @@ pub(crate) async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedRe
                                 UI_STATUS.lock().unwrap().2 = v;
                             }
                             Ok(Some(ipc::Data::Options(Some(v)))) => {
-                                *OPTIONS.lock().unwrap() = v
+                                *OPTIONS.lock().unwrap() = v;
+                                *OPTION_SYNCED.lock().unwrap() = true;
                             }
                             Ok(Some(ipc::Data::Config((name, Some(value))))) => {
                                 if name == "id" {
@@ -1052,6 +1058,11 @@ pub(crate) async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedRe
         *UI_STATUS.lock().unwrap() = (-1, key_confirmed, mouse_time, id.clone());
         sleep(1.).await;
     }
+}
+
+#[allow(dead_code)]
+pub fn option_synced() -> bool {
+    OPTION_SYNCED.lock().unwrap().clone()
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]

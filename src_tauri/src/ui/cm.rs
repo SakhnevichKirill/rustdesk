@@ -128,12 +128,15 @@ impl TauriConnectionManager {
     fn elevate_portable(&self, id: i32) {
         crate::ui_cm_interface::elevate_portable(id);
     }
+
+    fn get_option(&self, key: String) -> String {
+        crate::ui_interface::get_option(key)
+    }
 }
 
 impl sciter::EventHandler for TauriConnectionManager {
     // fn attached(&mut self, root: HELEMENT) {
-    //     // TODO:
-    //     // *self.ui_handler.element.lock().unwrap() = Some(Element::from(root));
+    //     *self.ui_handler.element.lock().unwrap() = Some(Element::from(root));
     // }
 
     sciter::dispatch_script_call! {
@@ -149,5 +152,6 @@ impl sciter::EventHandler for TauriConnectionManager {
         fn send_msg(i32, String);
         fn can_elevate();
         fn elevate_portable(i32);
+        fn get_option(String);
     }
 }

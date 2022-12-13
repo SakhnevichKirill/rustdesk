@@ -580,11 +580,11 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
     Ok(h)
 }
 
-pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
+pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
     let cmd = format!(
         "\"{}\" {}",
         std::env::current_exe()?.to_str().unwrap_or(""),
-        arg,
+        arg.join(" "),
     );
     let session_id = unsafe { get_current_session(share_rdp()) };
     use std::os::windows::ffi::OsStrExt;
@@ -596,7 +596,7 @@ pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
     let h = unsafe { LaunchProcessWin(wstr, session_id, TRUE) };
     if h.is_null() {
         bail!(
-            "Failed to launch {} with session id {}: {}",
+            "Failed to launch {:?} with session id {}: {}",
             arg,
             session_id,
             get_error()
@@ -1553,6 +1553,13 @@ pub fn run_as_system(arg: &str) -> ResultType<()> {
 
 pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_system: bool) {
     // avoid possible run recursively due to failed run.
+    log::info!(
+        "elevate:{}->{:?}, run_as_system:{}->{}",
+        is_elevate,
+        is_elevated(None),
+        is_run_as_system,
+        crate::username(),
+    );
     let arg_elevate = if is_setup {
         "--noinstall --elevate"
     } else {

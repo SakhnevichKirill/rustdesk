@@ -8,7 +8,8 @@ use std::{
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 
 use hbb_common::{
-    bail, config::LocalConfig, message_proto::*, rendezvous_proto::ConnType, ResultType,
+    bail, config::LocalConfig, get_version_number, message_proto::*, rendezvous_proto::ConnType,
+    ResultType,
 };
 use serde_json::json;
 
@@ -40,7 +41,7 @@ pub extern "C" fn rustdesk_core_main() -> bool {
 
 #[cfg(windows)]
 #[no_mangle]
-pub extern "C" fn rustdesk_core_main(args_len: *mut c_int) -> *mut *mut c_char {
+pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_char {
     unsafe { std::ptr::write(args_len, 0) };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -155,7 +156,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     /// unused in flutter, use switch_display or set_peer_info
-    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32) {}
+    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32, _cursor_embeded: bool) {}
 
     fn update_privacy_mode(&self) {
         self.push_event("update_privacy_mode", [].into());
@@ -295,9 +296,19 @@ impl InvokeUiSession for FlutterHandler {
             h.insert("y", d.y);
             h.insert("width", d.width);
             h.insert("height", d.height);
+            h.insert("cursor_embeded", if d.cursor_embeded { 1 } else { 0 });
             displays.push(h);
         }
         let displays = serde_json::ser::to_string(&displays).unwrap_or("".to_owned());
+        let mut features: HashMap<&str, i32> = Default::default();
+        for ref f in pi.features.iter() {
+            features.insert("privacy_mode", if f.privacy_mode { 1 } else { 0 });
+        }
+        // compatible with 1.1.9
+        if get_version_number(&pi.version) < get_version_number("1.2.0") {
+            features.insert("privacy_mode", 0);
+        }
+        let features = serde_json::ser::to_string(&features).unwrap_or("".to_owned());
         self.push_event(
             "peer_info",
             vec![
@@ -307,6 +318,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("sas_enabled", &pi.sas_enabled.to_string()),
                 ("displays", &displays),
                 ("version", &pi.version),
+                ("features", &features),
                 ("current_display", &pi.current_display.to_string()),
             ],
         );
@@ -343,6 +355,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("y", &display.y.to_string()),
                 ("width", &display.width.to_string()),
                 ("height", &display.height.to_string()),
+                ("cursor_embeded", &{if display.cursor_embeded {1} else {0}}.to_string()),
             ],
         );
     }

@@ -446,7 +446,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
         log::info!("try create privacy mode window");
         #[cfg(windows)]
         {
-            if let Err(e) = crate::platform::windows_lib::check_update_broker_process() {
+            if let Err(e) = crate::platform::windows::check_update_broker_process() {
                 log::warn!(
                     "Failed to check update broker process. Privacy mode may not work properly. {}",
                     e
@@ -602,6 +602,12 @@ async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &Unbo
                 fs::remove_job(id, write_jobs);
             }
         }
+        ipc::FS::WriteError { id, file_num, err } => {
+            if let Some(job) = fs::get_job(id, write_jobs) {
+                send_raw(fs::new_error(job.id(), err, file_num), tx);
+                fs::remove_job(job.id(), write_jobs);
+            }
+        }
         ipc::FS::WriteBlock {
             id,
             file_num,
@@ -611,11 +617,11 @@ async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &Unbo
             if let Some(job) = fs::get_job(id, write_jobs) {
                 if let Err(err) = job
                     .write(FileTransferBlock {
-                            id,
-                            file_num,
-                            data,
-                            compressed,
-                            ..Default::default()
+                        id,
+                        file_num,
+                        data,
+                        compressed,
+                        ..Default::default()
                     })
                     .await
                 {
@@ -790,11 +796,11 @@ pub fn can_elevate() -> bool {
     return false;
 }
 
-pub fn elevate_portable(id: i32) {
+pub fn elevate_portable(_id: i32) {
     #[cfg(windows)]
     {
         let lock = CLIENTS.read().unwrap();
-        if let Some(s) = lock.get(&id) {
+        if let Some(s) = lock.get(&_id) {
             allow_err!(s.tx.send(ipc::Data::DataPortableService(
                 ipc::DataPortableService::RequestStart
             )));
