@@ -198,7 +198,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         _ = status_timer.tick() => {
                             let speed = self.data_count.swap(0, Ordering::Relaxed);
                             let speed = format!("{:.2}kB/s", speed as f32 / 1024 as f32);
-                            log::info!("{:#?}", self.frame_count);
+                            // log::info!("frame_count: {:#?}, speed: {:#?}", self.frame_count, speed);
                             let fps = self.frame_count.swap(0, Ordering::Relaxed) as _;
                             self.handler.update_quality_status(QualityStatus {
                                 speed:Some(speed),

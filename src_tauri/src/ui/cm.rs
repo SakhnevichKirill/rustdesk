@@ -4,7 +4,6 @@ use crate::ui_cm_interface::{start_ipc, ConnectionManager, InvokeUiCM};
 use tauri::Manager;
 
 use hbb_common::{allow_err, log};
-// use sciter::{make_args, Element, Value, HELEMENT};
 use std::sync::Mutex;
 use std::{ops::Deref, sync::Arc};
 
@@ -133,19 +132,3 @@ impl TauriConnectionManager {
         crate::ui_interface::get_option(key)
     }
 }
-
-// sciter::dispatch_script_call! {
-//     fn t(String);
-//     fn check_click_time(i32);
-//     fn get_click_time();
-//     fn get_icon();
-//     fn close(i32);
-//     fn remove_disconnected_connection(i32);
-//     fn quit();
-//     fn authorize(i32);
-//     fn switch_permission(i32, String, bool);
-//     fn send_msg(i32, String);
-//     fn can_elevate();
-//     fn elevate_portable(i32);
-//     fn get_option(String);
-// }
