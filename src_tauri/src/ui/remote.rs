@@ -212,7 +212,14 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
-        self.call_tauri("updatePi", pi);
+        self.call_tauri("updatePi", (
+            pi.username.clone(), 
+            pi.hostname.clone(), 
+            pi.platform.clone(), 
+            pi.sas_enabled.clone(), 
+            pi.displays.clone(), 
+            pi.current_display.clone()
+        ));
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {

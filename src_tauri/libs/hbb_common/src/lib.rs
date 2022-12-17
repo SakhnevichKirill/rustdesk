@@ -1,6 +1,7 @@
 pub mod compress;
 pub mod platform;
 pub mod protos;
+pub mod proto_serde;
 pub use bytes;
 use config::Config;
 pub use futures;
