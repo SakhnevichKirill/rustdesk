@@ -32,16 +32,17 @@ lazy_static::lazy_static! {
     static ref VIDEO: Arc<Mutex<Option<Video>>> = Default::default();
 }
 
-/// SciterHandler
+/// TauriHandler
 /// * element
-/// * close_state  for file path when close
+/// * close_state for file path when close
 #[derive(Clone, Default)]
-pub struct SciterHandler {
+pub struct TauriHandler {
+    // TODO: sciter to tauri
     element: Arc<Mutex<Option<Element>>>,
     close_state: HashMap<String, String>,
 }
 
-impl SciterHandler {
+impl TauriHandler {
     fn call_tauri<S: Serialize + Clone>(&self, event: &str, payload: S) {
         let app_handle: Option<tauri::AppHandle> = get_app_handle();
         match app_handle {
@@ -55,7 +56,7 @@ impl SciterHandler {
     }
 }
 
-impl InvokeUiSession for SciterHandler {
+impl InvokeUiSession for TauriHandler {
     fn set_cursor_data(&self, cd: CursorData) {
         let mut colors = hbb_common::compress::decompress(&cd.colors);
         if colors.iter().filter(|x| **x != 0).next().is_none() {
@@ -211,6 +212,11 @@ impl InvokeUiSession for SciterHandler {
         //     .map(|v| v.render_frame(data).ok());
     }
 
+    // on encoded_frames frontend decods frames to RGBA
+    fn on_encoded_frames(&self, frames: &[EncodedVideoFrame]) {
+        self.call_tauri("encoded_frames", frames);
+    }
+
     fn set_peer_info(&self, pi: &PeerInfo) {
         self.call_tauri("updatePi", (
             pi.username.clone(), 
@@ -243,10 +249,10 @@ impl InvokeUiSession for SciterHandler {
     }
 }
 
-pub struct TauriSession(Session<SciterHandler>);
+pub struct TauriSession(Session<TauriHandler>);
 
 impl Deref for TauriSession {
-    type Target = Session<SciterHandler>;
+    type Target = Session<TauriHandler>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -333,7 +339,7 @@ pub enum PortForwards {
 
 impl TauriSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
-        let session: Session<SciterHandler> = Session {
+        let session: Session<TauriHandler> = Session {
             id: id.clone(),
             password: password.clone(),
             args,

@@ -13,7 +13,7 @@ fn main() {
         fn message(&self, _message: &MessageDescriptor) -> Customize {
             // println!("cargo:warning={:#?} {}", _message.proto().name(), _message.full_name());
             // DisplayInfo
-            if _message.proto().name() == "DisplayInfo" {
+            if ["DisplayInfo", "EncodedVideoFrame"].contains(&_message.proto().name()) {
                 return Customize::default().before("#[derive(::serde::Serialize, ::serde::Deserialize)]")
             }
             else {
@@ -22,7 +22,7 @@ fn main() {
         }
 
         fn field(&self, field: &FieldDescriptor) -> Customize {
-            if field.proto().name() == "DisplayInfo" {
+            if ["DisplayInfo", "EncodedVideoFrame"].contains(&field.proto().name()) {
                 // println!("cargo:warning={:#?} {} {}", field.proto().type_(), field.proto().name(), field.full_name());
                 if field.proto().type_() == Type::TYPE_ENUM {
                     // `EnumOrUnknown` is not a part of rust-protobuf, so external serializer is needed.
@@ -42,7 +42,7 @@ fn main() {
         }
 
         fn special_field(&self, _message: &MessageDescriptor, _field: &str) -> Customize {
-            if _message.proto().name() == "DisplayInfo" {
+            if ["DisplayInfo", "EncodedVideoFrame"].contains(&_message.proto().name()) {
                 Customize::default().before("#[serde(skip)]")
             }
             else {
