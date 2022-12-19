@@ -801,6 +801,7 @@ impl AudioHandler {
 pub struct VideoHandler {
     decoder: Decoder,
     latency_controller: Arc<Mutex<LatencyController>>,
+    pub frames: ::std::vec::Vec<EncodedVideoFrame>,
     pub rgb: Vec<u8>,
     recorder: Arc<Mutex<Option<Recorder>>>,
     record: bool,
@@ -817,6 +818,7 @@ impl VideoHandler {
                 },
             }),
             latency_controller,
+            frames: Default::default(),
             rgb: Default::default(),
             recorder: Default::default(),
             record: false,
@@ -824,7 +826,7 @@ impl VideoHandler {
     }
 
     /// Handle a new video frame.
-    pub fn handle_frame(&mut self, vf: VideoFrame) -> ResultType<bool> {
+    pub fn handle_frame(&mut self, vf: VideoFrame, decode: bool) -> ResultType<bool> {
         if vf.timestamp != 0 {
             // Update the lantency controller with the latest timestamp.
             self.latency_controller
@@ -834,6 +836,16 @@ impl VideoHandler {
         }
         match &vf.union {
             Some(frame) => {
+                if !decode {
+                    match frame {
+                        video_frame::Union::Vp9s(vp9s) => {
+                            // Decoder::handle_vp9s_video_frame(&mut self.vpx, vp9s, rgb)
+                            self.frames = vp9s.frames.clone();
+                            return Ok(true)
+                        }
+                        _ => return Err(anyhow!("unsupported video frame type!")),
+                    }
+                }
                 let res = self.decoder.handle_video_frame(frame, &mut self.rgb);
                 if self.record {
                     self.recorder
@@ -863,12 +875,14 @@ impl VideoHandler {
         self.record = false;
         if start {
             self.recorder = Recorder::new(RecorderContext {
+                server: false,
                 id,
                 default_dir: crate::ui_interface::default_video_save_directory(),
                 filename: "".to_owned(),
                 width: w as _,
                 height: h as _,
                 codec_id: scrap::record::RecordCodecID::VP9,
+                tx: None,
             })
             .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
         } else {
@@ -1337,6 +1351,15 @@ impl LoginConfigHandler {
             self.password = Default::default();
             interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
             true
+        } else if err == "No Password Access" {
+            self.password = Default::default();
+            interface.msgbox(
+                "wait-remote-accept-nook",
+                "Prompt",
+                "Please wait for the remote side to accept your session request...",
+                "",
+            );
+            true
         } else {
             if err.contains(SCRAP_X11_REQUIRED) {
                 interface.msgbox("error", "Login Error", err, SCRAP_X11_REF_URL);
@@ -1434,11 +1457,7 @@ impl LoginConfigHandler {
             username: self.id.clone(),
             password: password.into(),
             my_id,
-            my_name: if cfg!(windows) {
-                crate::platform::get_active_username()
-            } else {
-                crate::username()
-            },
+            my_name: crate::username(),
             option: self.get_option_message(true).into(),
             session_id: self.session_id,
             version: crate::VERSION.to_string(),
@@ -1501,9 +1520,9 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 /// # Arguments
 ///
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
-pub fn start_video_audio_threads<F>(video_callback: F) -> (MediaSender, MediaSender)
+pub fn start_video_audio_threads<F>(video_callback: F, decode: bool) -> (MediaSender, MediaSender)
 where
-    F: 'static + FnMut(&[u8]) + Send,
+    F: 'static + FnMut(&[u8], &[EncodedVideoFrame]) + Send,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
     let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
@@ -1518,8 +1537,8 @@ where
             if let Ok(data) = video_receiver.recv() {
                 match data {
                     MediaData::VideoFrame(vf) => {
-                        if let Ok(true) = video_handler.handle_frame(vf) {
-                            video_callback(&video_handler.rgb);
+                        if let Ok(true) = video_handler.handle_frame(vf, decode) {
+                            video_callback(&video_handler.rgb, &video_handler.frames);
                         }
                     }
                     MediaData::Reset => {
@@ -1572,13 +1591,37 @@ pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
     }
 }
 
+/// Whether is track pad scrolling.
+#[inline]
+#[cfg(all(target_os = "macos"))]
+fn check_scroll_on_mac(mask: i32, x: i32, y: i32) -> bool {
+    // flutter version we set mask type bit to 4 when track pad scrolling.
+    if mask & 7 == 4 {
+        return true;
+    }
+    if mask & 3 != 3 {
+        return false;
+    }
+    let btn = mask >> 3;
+    if y == -1 {
+        btn != 0xff88 && btn != -0x780000
+    } else if y == 1 {
+        btn != 0x78 && btn != 0x780000
+    } else if x != 0 {
+        // No mouse support horizontal scrolling.
+        true
+    } else {
+        false
+    }
+}
+
 /// Send mouse data.
 ///
 /// # Arguments
 ///
 /// * `mask` - Mouse event.
 ///     * mask = buttons << 3 | type
-///     * type, 1: down, 2: up, 3: wheel
+///     * type, 1: down, 2: up, 3: wheel, 4: trackpad
 ///     * buttons, 1: left, 2: right, 4: middle
 /// * `x` - X coordinate.
 /// * `y` - Y coordinate.
@@ -1616,6 +1659,10 @@ pub fn send_mouse(
     }
     if command {
         mouse_event.modifiers.push(ControlKey::Meta.into());
+    }
+    #[cfg(all(target_os = "macos"))]
+    if check_scroll_on_mac(mask, x, y) {
+        mouse_event.modifiers.push(ControlKey::Scroll.into());
     }
     msg_out.set_mouse_event(mouse_event);
     interface.send(Data::Message(msg_out));

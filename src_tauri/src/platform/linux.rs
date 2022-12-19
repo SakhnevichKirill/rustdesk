@@ -179,7 +179,8 @@ fn set_x11_env(uid: &str) {
     log::info!("uid of seat0: {}", uid);
     let gdm = format!("/run/user/{}/gdm/Xauthority", uid);
     let mut auth = get_env_tries("XAUTHORITY", uid, 10);
-    if auth.is_empty() {
+    // auth is another user's when uid = 0, https://github.com/rustdesk/rustdesk/issues/2468
+    if auth.is_empty() || uid == "0" {
         auth = if std::path::Path::new(&gdm).exists() {
             gdm
         } else {
@@ -324,7 +325,7 @@ pub fn start_os_service() {
                 ) {
                     stop_rustdesk_servers();
                     std::thread::sleep(std::time::Duration::from_millis(super::SERVICE_INTERVAL));
-                    match run_as_user("--server", Some((cur_uid, cur_user))) {
+                    match run_as_user(vec!["--server"], Some((cur_uid, cur_user))) {
                         Ok(ps) => user_server = ps,
                         Err(err) => {
                             log::error!("Failed to start server: {}", err);
@@ -416,9 +417,9 @@ fn get_display() -> String {
 
 pub fn is_login_wayland() -> bool {
     if let Ok(contents) = std::fs::read_to_string("/etc/gdm3/custom.conf") {
-        contents.contains("#WaylandEnable=false")
+        contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
     } else if let Ok(contents) = std::fs::read_to_string("/etc/gdm/custom.conf") {
-        contents.contains("#WaylandEnable=false")
+        contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
     } else {
         false
     }
@@ -566,7 +567,7 @@ fn is_opensuse() -> bool {
 }
 
 pub fn run_as_user(
-    arg: &str,
+    arg: Vec<&str>,
     user: Option<(String, String)>,
 ) -> ResultType<Option<std::process::Child>> {
     let (uid, username) = match user {
@@ -575,7 +576,8 @@ pub fn run_as_user(
     };
     let cmd = std::env::current_exe()?;
     let xdg = &format!("XDG_RUNTIME_DIR=/run/user/{}", uid) as &str;
-    let mut args = vec![xdg, "-u", &username, cmd.to_str().unwrap_or(""), arg];
+    let mut args = vec![xdg, "-u", &username, cmd.to_str().unwrap_or("")];
+    args.append(&mut arg.clone());
     // -E required for opensuse
     if is_opensuse() {
         args.insert(0, "-E");

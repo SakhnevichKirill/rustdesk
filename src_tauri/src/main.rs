@@ -24,12 +24,10 @@ use librustdesk::{
 };
 use tauri::{GlobalShortcutManager, Manager};
 
-
 fn main() {
     if !common::global_init() {
         return;
     }
-    println!("{}", !has_feature("custom-protocol"));
     let mut builder = tauri::Builder::default();
     builder = invoke_handler(builder);
     builder
@@ -42,16 +40,6 @@ fn main() {
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
     common::global_clean();
-}
-
-// checks if the given Cargo feature is enabled.
-fn has_feature(feature: &str) -> bool {
-    use heck::AsShoutySnakeCase;
-    // when a feature is enabled, Cargo sets the `CARGO_FEATURE_<name` env var to 1
-    // https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
-    std::env::var(format!("CARGO_FEATURE_{}", AsShoutySnakeCase(feature)))
-        .map(|x| x == "1")
-        .unwrap_or(false)
 }
 
 #[cfg(feature = "cli")]

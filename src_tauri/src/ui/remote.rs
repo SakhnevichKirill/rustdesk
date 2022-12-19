@@ -9,9 +9,7 @@ use sciter::{
         event::{EventReason, BEHAVIOR_EVENTS, EVENT_GROUPS, PHASE_MASK},
         Element, HELEMENT,
     },
-    make_args,
     video::{video_destination, AssetPtr, COLOR_SPACE},
-    Value,
 };
 
 use hbb_common::{
@@ -34,23 +32,17 @@ lazy_static::lazy_static! {
     static ref VIDEO: Arc<Mutex<Option<Video>>> = Default::default();
 }
 
-/// SciterHandler
+/// TauriHandler
 /// * element
-/// * close_state  for file path when close
+/// * close_state for file path when close
 #[derive(Clone, Default)]
-pub struct SciterHandler {
+pub struct TauriHandler {
+    // TODO: sciter to tauri
     element: Arc<Mutex<Option<Element>>>,
     close_state: HashMap<String, String>,
 }
 
-impl SciterHandler {
-    #[inline]
-    fn call(&self, func: &str, args: &[Value]) {
-        if let Some(ref e) = self.element.lock().unwrap().as_ref() {
-            allow_err!(e.call_method(func, args));
-        }
-    }
-
+impl TauriHandler {
     fn call_tauri<S: Serialize + Clone>(&self, event: &str, payload: S) {
         let app_handle: Option<tauri::AppHandle> = get_app_handle();
         match app_handle {
@@ -64,7 +56,7 @@ impl SciterHandler {
     }
 }
 
-impl InvokeUiSession for SciterHandler {
+impl InvokeUiSession for TauriHandler {
     fn set_cursor_data(&self, cd: CursorData) {
         let mut colors = hbb_common::compress::decompress(&cd.colors);
         if colors.iter().filter(|x| **x != 0).next().is_none() {
@@ -88,8 +80,10 @@ impl InvokeUiSession for SciterHandler {
         }
     }
 
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
-        self.call_tauri("setDisplay", (x, y, w, h));
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, _cursor_embeded: bool) {
+        self.call_tauri("setDisplay", (x, y, w, h, _cursor_embeded));
+        // TODO: start, stop streaming
+        log::info!("[video] reinitialized");
         //     // https://sciter.com/forums/topic/color_spaceiyuv-crash
         //     // Nothing spectacular in decoder – done on CPU side.
         //     // So if you can do BGRA translation on your side – the better.
@@ -179,9 +173,8 @@ impl InvokeUiSession for SciterHandler {
         _is_local: bool,
         only_count: bool,
     ) {
-        let mut m = make_fd(id, entries, only_count);
-        m.set_item("path", path);
-        self.call("updateFolderFiles", &make_args!(m));
+        let mut m = make_fd(id, entries, only_count, path);
+        self.call_tauri("updateTransferList",m);
     }
 
     fn update_transfer_list(&self) {
@@ -210,37 +203,29 @@ impl InvokeUiSession for SciterHandler {
         self.call_tauri("adaptSize", ());
     }
 
-    // fn on_rgba(&self, data: &[u8]) {
-    //     VIDEO
-    //         .lock()
-    //         .unwrap()
-    //         .as_mut()
-    //         .map(|v| v.render_frame(data).ok());
-    // }
-
     fn on_rgba(&self, data: &[u8]) {
         self.call_tauri("native-remote", data);
+        // VIDEO
+        //     .lock()
+        //     .unwrap()
+        //     .as_mut()
+        //     .map(|v| v.render_frame(data).ok());
+    }
+
+    // on encoded_frames frontend decods frames to RGBA
+    fn on_encoded_frames(&self, frames: &[EncodedVideoFrame]) {
+        self.call_tauri("encoded_frames", frames);
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
-        let mut pi_sciter = Value::map();
-        pi_sciter.set_item("username", pi.username.clone());
-        pi_sciter.set_item("hostname", pi.hostname.clone());
-        pi_sciter.set_item("platform", pi.platform.clone());
-        pi_sciter.set_item("sas_enabled", pi.sas_enabled);
-
-        let mut displays = Value::array(0);
-        for ref d in pi.displays.iter() {
-            let mut display = Value::map();
-            display.set_item("x", d.x);
-            display.set_item("y", d.y);
-            display.set_item("width", d.width);
-            display.set_item("height", d.height);
-            displays.push(display);
-        }
-        pi_sciter.set_item("displays", displays);
-        pi_sciter.set_item("current_display", pi.current_display);
-        self.call("updatePi", &make_args!(pi_sciter));
+        self.call_tauri("updatePi", (
+            pi.username.clone(), 
+            pi.hostname.clone(), 
+            pi.platform.clone(), 
+            pi.sas_enabled.clone(), 
+            pi.displays.clone(), 
+            pi.current_display.clone()
+        ));
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
@@ -264,10 +249,10 @@ impl InvokeUiSession for SciterHandler {
     }
 }
 
-pub struct TauriSession(Session<SciterHandler>);
+pub struct TauriSession(Session<TauriHandler>);
 
 impl Deref for TauriSession {
-    type Target = Session<SciterHandler>;
+    type Target = Session<TauriHandler>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -354,7 +339,7 @@ pub enum PortForwards {
 
 impl TauriSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
-        let session: Session<SciterHandler> = Session {
+        let session: Session<TauriHandler> = Session {
             id: id.clone(),
             password: password.clone(),
             args,
@@ -376,12 +361,8 @@ impl TauriSession {
         Self(session)
     }
 
-    fn get_custom_image_quality(&mut self) -> Value {
-        let mut v = Value::array(0);
-        for x in self.lc.read().unwrap().custom_image_quality.iter() {
-            v.push(x);
-        }
-        v
+    fn get_custom_image_quality(&mut self) -> Vec<i32> {
+        self.lc.read().unwrap().custom_image_quality.clone()
     }
 
     pub fn has_hwcodec(&self) -> bool {
@@ -396,12 +377,8 @@ impl TauriSession {
         crate::get_icon()
     }
 
-    fn supported_hwcodec(&self) -> Value {
-        let (h264, h265) = self.0.supported_hwcodec();
-        let mut v = Value::array(0);
-        v.push(h264);
-        v.push(h265);
-        v
+    fn supported_hwcodec(&self) -> (bool, bool) {
+        self.0.supported_hwcodec()
     }
 
     pub fn save_size(&mut self, x: i32, y: i32, w: i32, h: i32) {
@@ -618,31 +595,65 @@ impl TauriSession {
             log::error!("Failed to spawn IP tunneling: {}", err);
         }
     }
-
 }
 
-pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
-    let mut m = Value::map();
-    m.set_item("id", id);
-    let mut a = Value::array(0);
+pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool, path: String) -> FDValue {
+    let mut a: Vec<FileEntryValue> = Vec::new();
     let mut n: u64 = 0;
     for entry in entries {
         n += entry.size;
         if only_count {
             continue;
         }
-        let mut e = Value::map();
-        e.set_item("name", entry.name.to_owned());
         let tmp = entry.entry_type.value();
-        e.set_item("type", if tmp == 0 { 1 } else { tmp });
-        e.set_item("time", entry.modified_time as f64);
-        e.set_item("size", entry.size as f64);
+        let e = FileEntryValue{
+            name: entry.name.to_owned(),
+            _type: if tmp == 0 { 1 } else { tmp },
+            time: entry.modified_time as f64,
+            size: entry.size as f64,
+        };
         a.push(e);
     }
-    if !only_count {
-        m.set_item("entries", a);
+    FDValue{
+        id: id,
+        entries: if !only_count { a } else { vec![] },
+        num_entries: entries.len() as i32,
+        total_size: n as f64,
+        path: path,
     }
-    m.set_item("num_entries", entries.len() as i32);
-    m.set_item("total_size", n as f64);
-    m
+}
+
+pub fn make_fd_empty() -> FDValue {
+    FDValue{
+        id: 0,
+        entries: vec![FileEntryValue{
+            name: "".to_owned(),
+            _type: 0,
+            time: 0.0,
+            size: 0.0,
+        }],
+        num_entries: 0,
+        total_size: 0.0,
+        path: "".to_owned(),
+    }
+
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct FileEntryValue {
+    name: String,
+    _type: i32,
+    time: f64,
+    size: f64,
+}
+
+
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FDValue {
+    id: i32,
+    entries: Vec<FileEntryValue>,
+    num_entries: i32,
+    total_size: f64,
+    path: String,
 }

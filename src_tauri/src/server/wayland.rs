@@ -115,7 +115,7 @@ pub(super) fn is_inited() -> Option<Message> {
     }
 }
 
-async fn check_init() -> ResultType<()> {
+pub(super) async fn check_init() -> ResultType<()> {
     if !scrap::is_x11() {
         let mut minx = 0;
         let mut maxx = 0;
@@ -127,7 +127,10 @@ async fn check_init() -> ResultType<()> {
             if *lock == 0 {
                 let all = Display::all()?;
                 let num = all.len();
-                let (primary, displays) = super::video_service::get_displays_2(&all);
+                let (primary, mut displays) = super::video_service::get_displays_2(&all);
+                for display in displays.iter_mut() {
+                    display.cursor_embeded = true;
+                }
 
                 let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
                 for d in &all {
@@ -171,14 +174,13 @@ async fn check_init() -> ResultType<()> {
 
         if minx != maxx && miny != maxy {
             log::info!(
-                "send uinput resolution: ({}, {}), ({}, {})",
+                "update mouse resolution: ({}, {}), ({}, {})",
                 minx,
                 maxx,
                 miny,
                 maxy
             );
-            allow_err!(input_service::set_uinput_resolution(minx, maxx, miny, maxy).await);
-            allow_err!(input_service::set_uinput().await);
+            allow_err!(input_service::update_mouse_resolution(minx, maxx, miny, maxy).await);
         }
     }
     Ok(())
@@ -241,6 +243,7 @@ pub(super) fn get_display_num() -> ResultType<usize> {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn release_resouce() {
     if scrap::is_x11() {
         return;

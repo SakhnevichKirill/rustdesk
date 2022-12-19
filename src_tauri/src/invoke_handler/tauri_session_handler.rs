@@ -3,9 +3,8 @@ use hbb_common::tokio::sync::mpsc;
 use crate::{
     ui::{remote::{TauriSession, PortForwards}, cm::TauriHandler}, 
     ui_session_interface::{InvokeUiSession, Session}, 
-    client::{Interface, file_trait::FileManager}, 
+    client::{Interface, file_trait::{FileManager, self}}, 
     ui_cm_interface::ConnectionManager, ipc::Data, 
-    
 };
 
 use std::{sync::Mutex};
@@ -149,11 +148,59 @@ pub fn get_home_dir(tauri_session: tauri::State<Mutex<TauriSession>>) -> String 
     tauri_session.lock().unwrap().get_home_dir()
 }
 
-// client::read_dir, - scitter dependents
+// client::read_dir
+#[tauri::command(async)]
+pub fn read_dir(
+    path: String, 
+    include_hidden: bool,
+    tauri_session: tauri::State<Mutex<TauriSession>>
+){
+    tauri_session.lock().unwrap().read_dir(path, include_hidden);
+}
+
 // client::remove_dir,- scitter dependents
+#[tauri::command(async)]
+pub fn remove_dir(
+    id: i32, 
+    path: String, 
+    is_remote: bool,
+    tauri_session: tauri::State<Mutex<TauriSession>>
+){
+    tauri_session.lock().unwrap().remove_dir(id, path, is_remote);
+}
+
 // client::create_dir,- scitter dependents
+#[tauri::command(async)]
+pub fn create_dir(
+    id: i32, 
+    path: String, 
+    is_remote: bool,
+    tauri_session: tauri::State<Mutex<TauriSession>>
+){
+    tauri_session.lock().unwrap().create_dir(id, path, is_remote);
+}
+
 // client::remove_file,- scitter dependents
+#[tauri::command(async)]
+pub fn remove_file(
+    id: i32, 
+    path: String, 
+    file_num: i32,
+    is_remote: bool,
+    tauri_session: tauri::State<Mutex<TauriSession>>
+){
+    tauri_session.lock().unwrap().remove_file(id, path, file_num, is_remote);
+}
 // client::read_remote_dir, - dependents?
+#[tauri::command(async)]
+pub fn read_remote_dir(
+    path: String, 
+    include_hidden: bool,
+    tauri_session: tauri::State<Mutex<TauriSession>>
+){
+    tauri_session.lock().unwrap().read_remote_dir(path, include_hidden);
+}
+
 // client::send_chat,
 #[tauri::command(async)]
 pub fn send_chat(
@@ -173,40 +220,85 @@ pub fn switch_display(
 }
 
 // client::remove_dir_all, - dependents?
-// #[tauri::command(async)]
-// pub fn remove_dir_all(
-//     id: i32,
-//     path: String,
-//     is_remote: bool, 
-//     include_hidden: bool,
-//     tauri_session: tauri::State<Mutex<TauriSession>>,
-// ){
-//     tauri_session.lock().unwrap().remove_dir_all(id, path, is_remote, include_hidden)
-// }
+#[tauri::command(async)]
+pub fn remove_dir_all(
+    id: i32,
+    path: String,
+    is_remote: bool, 
+    include_hidden: bool,
+    tauri_session: tauri::State<Mutex<TauriSession>>,
+){
+    tauri_session.lock().unwrap().remove_dir_all(id, path, is_remote, include_hidden)
+}
 
 // client::confirm_delete_files, - dependents?
+#[tauri::command(async)]
+pub fn confirm_delete_files(
+    id: i32, 
+    file_num: i32,
+    tauri_session: tauri::State<Mutex<TauriSession>>,
+){
+    tauri_session.lock().unwrap().confirm_delete_files(id, file_num)
+}
+
 
 // client::set_no_confirm, - dependents?
+#[tauri::command(async)]
+pub fn set_no_confirm(
+    id: i32, 
+    file_num: i32,
+    tauri_session: tauri::State<Mutex<TauriSession>>,
+){
+    tauri_session.lock().unwrap().confirm_delete_files(id, file_num)
+}
+
 
 // client::cancel_job, - dependents?
+#[tauri::command(async)]
+pub fn cancel_job(
+    id: i32, 
+    tauri_session: tauri::State<Mutex<TauriSession>>,
+){
+    tauri_session.lock().unwrap().cancel_job(id)
+}
 
 // client::send_files,  - dependents?
+#[tauri::command(async)]
+pub fn send_files(
+    id: i32, 
+    path: String, 
+    to: String, 
+    file_num: i32, 
+    include_hidden: bool, 
+    is_remote: bool,
+    tauri_session: tauri::State<Mutex<TauriSession>>,
+){
+    tauri_session.lock().unwrap().send_files(id, path, to, file_num, include_hidden, is_remote)
+}
 
 // client::add_job, - dependents?
-// #[tauri::command(async)]
-// pub fn add_job(
-//     id: i32, 
-//     path: String, 
-//     to: String, 
-//     file_num: i32, 
-//     include_hidden: bool, 
-//     is_remote: bool,
-//     tauri_session: tauri::State<Mutex<TauriSession>>,
-// ){
-//     tauri_session.lock().unwrap().add_job(id, path, to, file_num, include_hidden, is_remote)
-// }
+#[tauri::command(async)]
+pub fn add_job(
+    id: i32, 
+    path: String, 
+    to: String, 
+    file_num: i32, 
+    include_hidden: bool, 
+    is_remote: bool,
+    tauri_session: tauri::State<Mutex<TauriSession>>,
+){
+    tauri_session.lock().unwrap().add_job(id, path, to, file_num, include_hidden, is_remote)
+}
 
 // client::resume_job, - dependents?
+#[tauri::command(async)]
+pub fn resume_job(
+    id: i32, 
+    is_remote: bool,
+    tauri_session: tauri::State<Mutex<TauriSession>>,
+){
+    tauri_session.lock().unwrap().resume_job(id, is_remote)
+}
 
 // client::get_platform,
 #[tauri::command(async)]

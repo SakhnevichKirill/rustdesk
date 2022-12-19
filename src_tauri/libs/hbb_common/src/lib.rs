@@ -1,6 +1,7 @@
 pub mod compress;
 pub mod platform;
 pub mod protos;
+pub mod proto_serde;
 pub use bytes;
 use config::Config;
 pub use futures;
@@ -58,6 +59,21 @@ macro_rules! allow_err {
             log::debug!(
                 "{:?}, {}:{}:{}:{}",
                 err,
+                module_path!(),
+                file!(),
+                line!(),
+                column!()
+            );
+        } else {
+        }
+    };
+    
+    ($e:expr, $($arg:tt)*) => {
+        if let Err(err) = $e {
+            log::debug!(
+                "{:?}, {}, {}:{}:{}:{}",
+                err,
+                format_args!($($arg)*),
                 module_path!(),
                 file!(),
                 line!(),
@@ -249,5 +265,11 @@ mod tests {
     fn test_mangle() {
         let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 16, 32), 21116));
         assert_eq!(addr, AddrMangle::decode(&AddrMangle::encode(addr)));
+    }
+
+    #[test]
+    fn test_allow_err() {
+        allow_err!(Err("test err") as Result<(), &str>);
+        allow_err!(Err("test err with msg") as Result<(), &str>, "prompt {}", "failed");
     }
 }

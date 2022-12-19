@@ -44,7 +44,7 @@ const ADDR_CAPTURE_FRAME_COUNTER: usize = ADDR_CAPTURE_WOULDBLOCK + size_of::<i3
 const ADDR_CAPTURE_FRAME: usize =
     (ADDR_CAPTURE_FRAME_COUNTER + SIZE_COUNTER + FRAME_ALIGN - 1) / FRAME_ALIGN * FRAME_ALIGN;
 
-const IPC_PROFIX: &str = "_portable_service";
+const IPC_SUFFIX: &str = "_portable_service";
 pub const SHMEM_NAME: &str = "_portable_service";
 const MAX_NACK: usize = 3;
 const MAX_DXGI_FAIL_TIME: usize = 5;
@@ -237,11 +237,10 @@ pub mod server {
     fn run_exit_check() {
         loop {
             if EXIT.lock().unwrap().clone() {
-                std::thread::sleep(Duration::from_secs(1));
-                log::info!("exit from seperate check thread");
+                std::thread::sleep(Duration::from_millis(50));
                 std::process::exit(0);
             }
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(Duration::from_millis(50));
         }
     }
 
@@ -350,7 +349,7 @@ pub mod server {
                         if e.kind() != std::io::ErrorKind::WouldBlock {
                             // DXGI_ERROR_INVALID_CALL after each success on Microsoft GPU driver
                             // log::error!("capture frame failed:{:?}", e);
-                            if crate::platform::windows_lib::desktop_changed() {
+                            if crate::platform::windows::desktop_changed() {
                                 crate::platform::try_change_desktop();
                                 c = None;
                                 std::thread::sleep(spf);
@@ -377,7 +376,7 @@ pub mod server {
     async fn run_ipc_client() {
         use DataPortableService::*;
 
-        let postfix = IPC_PROFIX;
+        let postfix = IPC_SUFFIX;
 
         match ipc::connect(1000, postfix).await {
             Ok(mut stream) => {
@@ -462,6 +461,7 @@ pub mod client {
     }
 
     pub(crate) fn start_portable_service() -> ResultType<()> {
+        log::info!("start portable service");
         if PORTABLE_SERVICE_RUNNING.lock().unwrap().clone() {
             bail!("already running");
         }
@@ -484,7 +484,7 @@ pub mod client {
                 crate::portable_service::SHMEM_NAME,
                 shmem_size,
             )?);
-            shutdown_hooks::add_shutdown_hook(drop_shmem);
+            shutdown_hooks::add_shutdown_hook(drop_portable_service_shared_memory);
         }
         let mut option = SHMEM.lock().unwrap();
         let shmem = option.as_mut().unwrap();
@@ -504,7 +504,7 @@ pub mod client {
         Ok(())
     }
 
-    extern "C" fn drop_shmem() {
+    pub extern "C" fn drop_portable_service_shared_memory() {
         log::info!("drop shared memory");
         *SHMEM.lock().unwrap() = None;
     }
@@ -622,7 +622,18 @@ pub mod client {
     async fn start_ipc_server_async(rx: mpsc::UnboundedReceiver<Data>) {
         use DataPortableService::*;
         let rx = Arc::new(tokio::sync::Mutex::new(rx));
-        let postfix = IPC_PROFIX;
+        let postfix = IPC_SUFFIX;
+        #[cfg(feature = "flutter")]
+        let quick_support = {
+            let args: Vec<_> = std::env::args().collect();
+            args.contains(&"--quick_support".to_string())
+        };
+        #[cfg(not(feature = "flutter"))]
+        let quick_support = std::env::current_exe()
+            .unwrap_or("".into())
+            .to_string_lossy()
+            .to_lowercase()
+            .ends_with("qs.exe");
 
         match new_listener(postfix).await {
             Ok(mut incoming) => loop {
@@ -660,8 +671,10 @@ pub mod client {
                                                                 *PORTABLE_SERVICE_RUNNING.lock().unwrap() = true;
                                                             },
                                                             ConnCount(None) => {
-                                                                let cnt = crate::server::CONN_COUNT.lock().unwrap().clone();
-                                                                stream.send(&Data::DataPortableService(ConnCount(Some(cnt)))).await.ok();
+                                                                if !quick_support {
+                                                                    let cnt = crate::server::CONN_COUNT.lock().unwrap().clone();
+                                                                    stream.send(&Data::DataPortableService(ConnCount(Some(cnt)))).await.ok();
+                                                                }
                                                             },
                                                             WillClose => {
                                                                 log::info!("portable service will close");

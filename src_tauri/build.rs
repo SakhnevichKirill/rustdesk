@@ -3,7 +3,7 @@ fn build_windows() {
     cc::Build::new().file("src/windows.cc").compile("windows");
     println!("cargo:rustc-link-lib=WtsApi32");
     println!("cargo:rerun-if-changed=build.rs");
-    // println!("cargo:rerun-if-changed=windows.cc");
+    println!("cargo:rerun-if-changed=windows.cc");
 }
 
 #[cfg(all(windows, feature = "inline"))]

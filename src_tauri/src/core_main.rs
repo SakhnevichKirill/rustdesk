@@ -14,6 +14,7 @@ pub fn core_main() -> Option<Vec<String>> {
     let mut i = 0;
     let mut _is_elevate = false;
     let mut _is_run_as_system = false;
+    let mut _is_quick_support = false;
     let mut _is_flutter_connect = false;
     let mut arg_exe = Default::default();
     for arg in std::env::args() {
@@ -29,6 +30,8 @@ pub fn core_main() -> Option<Vec<String>> {
                 _is_elevate = true;
             } else if arg == "--run-as-system" {
                 _is_run_as_system = true;
+            } else if arg == "--quick_support" {
+                _is_quick_support = true;
             } else {
                 args.push(arg);
             }
@@ -40,6 +43,11 @@ pub fn core_main() -> Option<Vec<String>> {
         return core_main_invoke_new_connection(std::env::args());
     }
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
+    #[cfg(not(feature = "flutter"))]
+    {
+        _is_quick_support =
+            cfg!(windows) && args.is_empty() && arg_exe.to_lowercase().ends_with("qs.exe");
+    }
     if click_setup {
         args.push("--install".to_owned());
         flutter_args.push("--install".to_string());
@@ -78,6 +86,17 @@ pub fn core_main() -> Option<Vec<String>> {
                 )
                 .start()
                 .ok();
+        }
+    }
+    #[cfg(windows)]
+    if !crate::platform::is_installed()
+        && args.is_empty()
+        && _is_quick_support
+        && !_is_elevate
+        && !_is_run_as_system
+    {
+        if let Err(e) = crate::portable_service::client::start_portable_service() {
+            log::error!("Failed to start portable service:{:?}", e);
         }
     }
     #[cfg(windows)]
@@ -163,13 +182,20 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(target_os = "macos")]
             {
                 std::thread::spawn(move || crate::start_server(true));
-                // to-do: for flutter, starting tray not ready yet, or we can reuse sciter's tray implementation.
+                crate::tray::make_tray();
+                return None;
             }
             #[cfg(target_os = "linux")]
             {
                 let handler = std::thread::spawn(move || crate::start_server(true));
-                crate::tray::start_tray();
-                // revent server exit when encountering errors from tray
+                // Show the tray in linux only when current user is a normal user
+                // [Note]
+                // As for GNOME, the tray cannot be shown in user's status bar.
+                // As for KDE, the tray can be shown without user's theme.
+                if !crate::platform::is_root() {
+                    crate::tray::start_tray();
+                }
+                // prevent server exit when encountering errors from tray
                 hbb_common::allow_err!(handler.join());
             }
         } else if args[0] == "--import-config" {
@@ -188,7 +214,11 @@ pub fn core_main() -> Option<Vec<String>> {
             return None;
         } else if args[0] == "--password" {
             if args.len() == 2 {
-                crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
+                if crate::platform::is_root() {
+                    crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
+                } else {
+                    println!("Administrative privileges required!");
+                }
             }
             return None;
         } else if args[0] == "--check-hwcodec-config" {
@@ -200,6 +230,7 @@ pub fn core_main() -> Option<Vec<String>> {
             // meanwhile, return true to call flutter window to show control panel
             #[cfg(feature = "flutter")]
             crate::flutter::connection_manager::start_listen_ipc_thread();
+            crate::ui_interface::start_option_status_sync();
         }
     }
     //_async_logger_holder.map(|x| x.flush());
@@ -276,7 +307,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             "RustDesk",
             (WM_USER + 2) as _, // refered from unilinks desktop pub
             uni_links.as_str(),
-            true
+            true,
         );
         return if res { None } else { Some(Vec::new()) };
     }

@@ -8,13 +8,12 @@ pub trait FileManager: Interface {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-    fn read_dir(&self, path: String, include_hidden: bool) -> sciter::Value {
+    fn read_dir(&self, path: String, include_hidden: bool) -> crate::ui::remote::FDValue {
         match fs::read_dir(&fs::get_path(&path), include_hidden) {
-            Err(_) => sciter::Value::null(),
+            Err(_) => crate::ui::remote::make_fd_empty(), // TODO: return null
             Ok(fd) => {
                 use crate::ui::remote::make_fd;
-                let mut m = make_fd(0, &fd.entries.to_vec(), false);
-                m.set_item("path", path);
+                let mut m = make_fd(0, &fd.entries.to_vec(), false, path);
                 m
             }
         }
