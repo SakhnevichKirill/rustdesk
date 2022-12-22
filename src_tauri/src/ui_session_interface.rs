@@ -1512,7 +1512,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let ui_handler = handler.ui_handler.clone();
     let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8], frames: &[EncodedVideoFrame]| {
         frame_count_cl.fetch_add(1, Ordering::Relaxed);
-        ui_handler.on_rgba(data);
+        // ui_handler.on_rgba(data);
     },
 );
 
