@@ -47,7 +47,7 @@ lazy_static::lazy_static! {
 
 struct UIHostHandler;
 
-fn get_app_handle() -> Option<tauri::AppHandle> {
+pub fn get_app_handle() -> Option<tauri::AppHandle> {
     APPHANDLE.lock().unwrap().clone()
 }
 

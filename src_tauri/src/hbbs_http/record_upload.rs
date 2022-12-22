@@ -10,6 +10,9 @@ use std::{
     sync::{mpsc::Receiver, Arc, Mutex},
     time::{Duration, Instant},
 };
+use tauri::Manager;
+use crate::ui::get_app_handle;
+
 
 const MAX_HEADER_LEN: usize = 1024;
 const SHOULD_SEND_TIME: Duration = Duration::from_secs(1);
@@ -125,6 +128,23 @@ impl RecordUploader {
         }
     }
 
+    fn call_tauri<S: Serialize + Clone>(&self, event: &str, payload: S) {
+        let app_handle: Option<tauri::AppHandle> = get_app_handle();
+        match app_handle {
+            Some(app) => {
+                app.emit_all(event, payload).unwrap();
+            }
+            None => {
+                log::info!("Waiting to get app handle for macro to execute...");
+            }
+        }
+    }
+    
+    // on encoded_frames frontend decods frames to RGBA
+    fn on_encoded_frames(&self, file: &str, offset: u64, length: usize, buf: Vec<u8>) {
+        self.call_tauri("encoded_frames", (file, offset, length, buf));
+    }
+
     fn handle_frame(&mut self, flush: bool) -> ResultType<()> {
         if !flush && self.last_send.elapsed() < SHOULD_SEND_TIME {
             return Ok(());
@@ -150,8 +170,9 @@ impl RecordUploader {
                                         ("offset", &self.upload_size.to_string()),
                                         ("length", &length.to_string()),
                                     ],
-                                    buf,
+                                    buf.clone(),
                                 )?;
+                                self.on_encoded_frames(&self.filename, self.upload_size, length, buf.clone());
                                 self.upload_size = len;
                                 self.last_send = Instant::now();
                                 Ok(())

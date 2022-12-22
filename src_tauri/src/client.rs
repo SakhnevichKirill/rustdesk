@@ -826,7 +826,7 @@ impl VideoHandler {
     }
 
     /// Handle a new video frame.
-    pub fn handle_frame(&mut self, vf: VideoFrame, decode: bool) -> ResultType<bool> {
+    pub fn handle_frame(&mut self, vf: VideoFrame) -> ResultType<bool> {
         if vf.timestamp != 0 {
             // Update the lantency controller with the latest timestamp.
             self.latency_controller
@@ -836,16 +836,6 @@ impl VideoHandler {
         }
         match &vf.union {
             Some(frame) => {
-                if !decode {
-                    match frame {
-                        video_frame::Union::Vp9s(vp9s) => {
-                            // Decoder::handle_vp9s_video_frame(&mut self.vpx, vp9s, rgb)
-                            self.frames = vp9s.frames.clone();
-                            return Ok(true)
-                        }
-                        _ => return Err(anyhow!("unsupported video frame type!")),
-                    }
-                }
                 let res = self.decoder.handle_video_frame(frame, &mut self.rgb);
                 if self.record {
                     self.recorder
@@ -1520,7 +1510,7 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 /// # Arguments
 ///
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
-pub fn start_video_audio_threads<F>(video_callback: F, decode: bool) -> (MediaSender, MediaSender)
+pub fn start_video_audio_threads<F>(video_callback: F) -> (MediaSender, MediaSender)
 where
     F: 'static + FnMut(&[u8], &[EncodedVideoFrame]) + Send,
 {
@@ -1537,7 +1527,7 @@ where
             if let Ok(data) = video_receiver.recv() {
                 match data {
                     MediaData::VideoFrame(vf) => {
-                        if let Ok(true) = video_handler.handle_frame(vf, decode) {
+                        if let Ok(true) = video_handler.handle_frame(vf) {
                             video_callback(&video_handler.rgb, &video_handler.frames);
                         }
                     }

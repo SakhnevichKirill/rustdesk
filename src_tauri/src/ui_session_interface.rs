@@ -1126,7 +1126,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64);
     fn adapt_size(&self);
     fn on_rgba(&self, data: &[u8]);
-    fn on_encoded_frames(&self, frames: &[EncodedVideoFrame]);
+    fn on_encoded_frames(&self, file: &str, offset: u64, length: u64, buf: Vec<u8>);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
@@ -1512,13 +1512,8 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let ui_handler = handler.ui_handler.clone();
     let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8], frames: &[EncodedVideoFrame]| {
         frame_count_cl.fetch_add(1, Ordering::Relaxed);
-        if frames.len() > 0 {
-            ui_handler.on_encoded_frames(frames);
-        } else {
-            ui_handler.on_rgba(data);
-        }
+        ui_handler.on_rgba(data);
     },
-    false
 );
 
     let mut remote = Remote::new(
