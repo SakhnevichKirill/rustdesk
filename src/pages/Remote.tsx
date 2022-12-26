@@ -37,16 +37,14 @@ const Remote = () => {
         const listenEvents = async () => {
             setConnecitonLoading(true)
             await invoke('reconnect')
-            await invoke('record_screen')
-
             // FIXME for every tauri e type I need to e: {payload: {...}}
             const unlistenEncodedFrames = await listen('encoded_frames', (e: { payload: { data: number[] }[] }) => {
                 console.log(e)
-                // TODO могут данные прийти, а буфера нет открылось?
-                if (mediaSrcBuffer) {
-                    const binArr = new Uint8Array(e.payload[0].data)
-                    mediaSrcBuffer.appendBuffer(binArr.buffer)
-                }
+                // // TODO могут данные прийти, а буфера нет открылось?
+                // if (mediaSrcBuffer) {
+                //     const binArr = new Uint8Array(e.payload[0].data)
+                //     mediaSrcBuffer.appendBuffer(binArr.buffer)
+                // }
             })
 
             const unlistenMsgboxRetry = await listen('msgbox_retry', (e: {
@@ -63,7 +61,10 @@ const Remote = () => {
                 if (status === 'input-password') setMsg('Подтвердите подключение')
             })
             const unlistenSetDisplay = await listen('setDisplay', (e: { payload: [x: number, y: number, w: number, h: number] }) => {
-                setRemoteDim({ width: e.payload[2], height: e.payload[3] })
+                const width = e.payload[2]
+                const height = e.payload[3]
+                setRemoteDim({ width, height })
+                invoke('record_screen', { start: true, w: width, h: height })
             })
             const unlistenNativeRemote = await listen('native-remote', (e: { payload: Uint8ClampedArray }) => {
                 setPixels(new Uint8ClampedArray(e.payload))

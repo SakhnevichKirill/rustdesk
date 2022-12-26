@@ -12,8 +12,8 @@ const Remotes = () => {
         // TODO where I can find my_id?
         // if (_id === my_id)
     
-        invoke('set_remote_id', { id: _id }).then(console.log)
-        invoke('new_remote', { id: _id, remoteType: type }).then(console.log)
+        invoke('set_remote_id', { id: _id })
+        invoke('new_remote', { id: _id, remoteType: type })
     }
 
     return (
