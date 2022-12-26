@@ -119,7 +119,7 @@ impl RecordUploader {
                     self.upload_size = 0;
                     self.running = true;
                     self.last_send = Instant::now();
-                    self.send(&[("type", "new"), ("file", &filename)], Bytes::new())?;
+                    // self.send(&[("type", "new"), ("file", &filename)], Bytes::new())?;
                     Ok(())
                 }
                 Err(_) => bail!("can't parse filename:{:?}", filename),
@@ -153,9 +153,11 @@ impl RecordUploader {
             Ok(mut file) => match file.metadata() {
                 Ok(m) => {
                     let len = m.len();
+                    log::info!("file len: {:} {:} {:}", len, self.upload_size, len < self.upload_size);
                     if len <= self.upload_size {
                         return Ok(());
                     }
+                    log::info!("file flush: {:} {:} {:}", flush, SHOULD_SEND_SIZE, len - self.upload_size < SHOULD_SEND_SIZE);
                     if !flush && len - self.upload_size < SHOULD_SEND_SIZE {
                         return Ok(());
                     }
@@ -163,15 +165,16 @@ impl RecordUploader {
                     match file.seek(SeekFrom::Start(self.upload_size)) {
                         Ok(_) => match file.read_to_end(&mut buf) {
                             Ok(length) => {
-                                self.send(
-                                    &[
-                                        ("type", "part"),
-                                        ("file", &self.filename),
-                                        ("offset", &self.upload_size.to_string()),
-                                        ("length", &length.to_string()),
-                                    ],
-                                    buf.clone(),
-                                )?;
+                                log::info!("send {} bytes", length);
+                                // self.send(
+                                //     &[
+                                //         ("type", "part"),
+                                //         ("file", &self.filename),
+                                //         ("offset", &self.upload_size.to_string()),
+                                //         ("length", &length.to_string()),
+                                //     ],
+                                //     buf.clone(),
+                                // )?;
                                 self.on_encoded_frames(&self.filename, self.upload_size, length, buf.clone());
                                 self.upload_size = len;
                                 self.last_send = Instant::now();
@@ -196,15 +199,15 @@ impl RecordUploader {
                 match file.read(&mut buf) {
                     Ok(length) => {
                         buf.truncate(length);
-                        self.send(
-                            &[
-                                ("type", "tail"),
-                                ("file", &self.filename),
-                                ("offset", "0"),
-                                ("length", &length.to_string()),
-                            ],
-                            buf,
-                        )?;
+                        // self.send(
+                        //     &[
+                        //         ("type", "tail"),
+                        //         ("file", &self.filename),
+                        //         ("offset", "0"),
+                        //         ("length", &length.to_string()),
+                        //     ],
+                        //     buf,
+                        // )?;
                         log::info!("upload success, file:{}", self.filename);
                         Ok(())
                     }
@@ -216,10 +219,10 @@ impl RecordUploader {
     }
 
     fn handle_remove(&mut self) -> ResultType<()> {
-        self.send(
-            &[("type", "remove"), ("file", &self.filename)],
-            Bytes::new(),
-        )?;
+        // self.send(
+        //     &[("type", "remove"), ("file", &self.filename)],
+        //     Bytes::new(),
+        // )?;
         Ok(())
     }
 }

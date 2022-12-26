@@ -37,6 +37,14 @@ const Remote = () => {
         const listenEvents = async () => {
             setConnecitonLoading(true)
             await invoke('reconnect')
+            // await invoke('record_screen',  { start: true, v: remoteDim.height, h: remoteDim.width })
+            
+            const unlistenRecord = await listen('on_record', (e: { payload: { data: number[] }[] }) => {
+                console.log(e)
+                // TODO могут данные прийти, а буфера нет открылось?
+                invoke('record_screen', { start: true, w: remoteDim.width, h: remoteDim.height })
+            })
+
             // FIXME for every tauri e type I need to e: {payload: {...}}
             const unlistenEncodedFrames = await listen('encoded_frames', (e: { payload: { data: number[] }[] }) => {
                 console.log(e)
@@ -64,7 +72,6 @@ const Remote = () => {
                 const width = e.payload[2]
                 const height = e.payload[3]
                 setRemoteDim({ width, height })
-                invoke('record_screen', { start: true, w: width, h: height })
             })
             const unlistenNativeRemote = await listen('native-remote', (e: { payload: Uint8ClampedArray }) => {
                 setPixels(new Uint8ClampedArray(e.payload))
@@ -73,7 +80,7 @@ const Remote = () => {
                 setConnectionSpeed(e.payload[0])
             })
 
-            return { unlistenSetDisplay, unlistenNativeRemote, unlistenMsgboxRetry, unlistenUpdateQualityStatus, unlistenEncodedFrames }
+            return { unlistenRecord, unlistenSetDisplay, unlistenNativeRemote, unlistenMsgboxRetry, unlistenUpdateQualityStatus, unlistenEncodedFrames }
         }
 
         const unlisten = listenEvents().catch(() => null)
@@ -82,6 +89,7 @@ const Remote = () => {
             // FIXME It's awkward write every func, better to use array
             unlisten.then(unl => {
                 if (unl) {
+                    unl.unlistenRecord()
                     unl.unlistenNativeRemote()
                     unl.unlistenSetDisplay()
                     unl.unlistenMsgboxRetry()

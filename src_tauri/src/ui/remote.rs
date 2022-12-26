@@ -21,7 +21,7 @@ use tauri::Manager;
 use crate::{
     client::*,
     ui_interface::has_hwcodec,
-    ui_session_interface::{InvokeUiSession, Session},
+    ui_session_interface::{InvokeUiSession, Session}, invoke_handler,
 };
 
 use super::get_app_handle;
@@ -210,6 +210,10 @@ impl InvokeUiSession for TauriHandler {
         //     .unwrap()
         //     .as_mut()
         //     .map(|v| v.render_frame(data).ok());
+    }
+
+    fn on_record(&self) {
+        self.call_tauri("on_record", ());
     }
 
     // on encoded_frames frontend decods frames to RGBA

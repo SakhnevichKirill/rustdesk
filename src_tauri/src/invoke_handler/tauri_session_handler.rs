@@ -1,5 +1,4 @@
 use hbb_common::tokio::sync::mpsc;
-use hbb_common::log;
 
 use crate::{
     ui::{remote::{TauriSession, PortForwards}, cm::TauriHandler}, 
@@ -435,7 +434,6 @@ pub fn record_screen(
     h: i32,
     tauri_session: tauri::State<Mutex<TauriSession>>,
 ){
-    log::info!("Here");
     tauri_session.lock().unwrap().record_screen(start, w, h)
 }
 

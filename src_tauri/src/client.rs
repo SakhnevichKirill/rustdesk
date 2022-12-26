@@ -864,6 +864,12 @@ impl VideoHandler {
     pub fn record_screen(&mut self, start: bool, w: i32, h: i32, id: String) {
         self.record = false;
         if start {
+            // use crate::hbbs_http::record_upload;
+            // let tx = {
+            //     let (tx, rx) = std::sync::mpsc::channel();
+            //     record_upload::run(rx);
+            //     Some(tx)
+            // };
             self.recorder = Recorder::new(RecorderContext {
                 server: false,
                 id,
