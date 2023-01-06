@@ -3,6 +3,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[derive(Debug, Eq, PartialEq)]
+pub enum GrabState {
+    Ready,
+    Run,
+    Wait,
+    Exit,
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use arboard::Clipboard as ClipboardContext;
 
@@ -11,7 +19,7 @@ use hbb_common::compress::decompress;
 use hbb_common::{
     allow_err,
     anyhow::bail,
-    compress::{compress as compress_func},
+    compress::compress as compress_func,
     config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     get_version_number, log,
     message_proto::*,
@@ -612,12 +620,12 @@ pub fn get_api_server(api: String, custom: String) -> String {
     "https://admin.rustdesk.com".to_owned()
 }
 
-pub fn get_audit_server(api: String, custom: String) -> String {
+pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
     let url = get_api_server(api, custom);
     if url.is_empty() || url.contains("rustdesk.com") {
         return "".to_owned();
     }
-    format!("{}/api/audit", url)
+    format!("{}/api/audit/{}", url, typ)
 }
 
 pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {

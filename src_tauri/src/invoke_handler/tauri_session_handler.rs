@@ -9,21 +9,9 @@ use crate::{
 
 use std::{sync::Mutex};
 
-#[tauri::command]
-pub fn test_tauri(){
-    
-    // DEBUG //        
-    let new_cm = ConnectionManager {
-        ui_handler: TauriHandler::default(),
-    };
-    let (tx, rx) = mpsc::unbounded_channel::<Data>();
-    new_cm.add_connection(1, false, "port_forward".to_string(), "peer_id".to_string(), "name".to_string(), true, true, true, true, false, true, true, tx.clone());
-    // DEBUG //
-}
-
 #[tauri::command(async)]
-pub fn get_audit_server(tauri_session: tauri::State<Mutex<TauriSession>>) -> String {
-    tauri_session.lock().unwrap().get_audit_server()
+pub fn get_audit_server(typ: String, tauri_session: tauri::State<Mutex<TauriSession>>) -> String {
+    tauri_session.lock().unwrap().get_audit_server(typ)
 }
 
 #[tauri::command(async)]

@@ -33,19 +33,31 @@ const Remote = () => {
        mediaSrcBuffer = mediaSource.addSourceBuffer('video/webm; codecs="vp9"')
     }
 
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
     useEffect(() => {
         const listenEvents = async () => {
             setConnecitonLoading(true)
             await invoke('reconnect')
-            // await invoke('record_screen',  { start: true, v: remoteDim.height, h: remoteDim.width })
             
-            const unlistenRecord = await listen('on_record', (e: { payload: { data: number[] }[] }) => {
+            const unlistenRecord = await listen('on_record', async (e: { payload: { data: number[] }[] }) => {
                 console.log(e)
-                // TODO могут данные прийти, а буфера нет открылось?
-                invoke('record_screen', { start: true, w: remoteDim.width, h: remoteDim.height })
+
+                // Init video recording to WebM and encoded_frames emitter
+                await invoke('refresh_video') 
+                await invoke('record_screen', { start: true, w: remoteDim.width, h: remoteDim.height }) 
+
+                // Wait for 10 seconds
+                await sleep(10000)
+
+                // Stop recording and write tail of video
+                // TODO: tail of video written wrong
+                await invoke('record_screen', { start: false, w: remoteDim.width, h: remoteDim.height })
             })
+            invoke('record_screen', { start: false, w: remoteDim.width, h: remoteDim.height })
 
             // FIXME for every tauri e type I need to e: {payload: {...}}
+            // TODO: fix payload to [EncodedVideoFrame]
             const unlistenEncodedFrames = await listen('encoded_frames', (e: { payload: { data: number[] }[] }) => {
                 console.log(e)
                 // // TODO могут данные прийти, а буфера нет открылось?

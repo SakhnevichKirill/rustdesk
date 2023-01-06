@@ -29,7 +29,7 @@ function Form() {
     alert(`Hello ${firstname} ${lastname}`)
     setFirstname("")
     setLastname("")
-    console.log("test_tauri")
+    // console.log("test_tauri")
   }
 
   useEffect(() => {
@@ -48,8 +48,8 @@ function Form() {
   async function search() {
     // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 
-    const temp = (await invoke("test_tauri")
-    .then(()=>console.log("test_tauri")));
+    // const temp = (await invoke("test_tauri")
+    // .then(()=>console.log("test_tauri")));
   }
 
 

@@ -77,7 +77,6 @@ pub fn invoke_handler(builder: Builder<Wry>) -> Builder<Wry>{
         // native_remote,
         centerize,
         get_os,
-        tauri_session_handler::test_tauri,
         // UI for index.html and install.html
         ui_interface::t, // translate text for react component
         ui_interface::get_api_server, // get api server address 

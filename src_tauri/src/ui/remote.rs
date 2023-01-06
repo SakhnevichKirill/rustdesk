@@ -217,8 +217,8 @@ impl InvokeUiSession for TauriHandler {
     }
 
     // on encoded_frames frontend decods frames to RGBA
-    fn on_encoded_frames(&self, file: &str, offset: u64, length: u64, buf: Vec<u8>) {
-        self.call_tauri("encoded_frames", (file, offset, length, buf));
+    fn on_encoded_frames(&self, encoded_frames: &[EncodedVideoFrame]) {
+        self.call_tauri("encoded_frames", encoded_frames);
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {
@@ -230,6 +230,17 @@ impl InvokeUiSession for TauriHandler {
             pi.displays.clone(), 
             pi.current_display.clone()
         ));
+    }
+
+    fn on_connected(&self, conn_type: ConnType) {
+        match conn_type {
+            ConnType::RDP => {}
+            ConnType::PORT_FORWARD => {}
+            ConnType::FILE_TRANSFER => {}
+            ConnType::DEFAULT_CONN => {
+                crate::keyboard::client::start_grab_loop();
+            }
+        }
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
@@ -363,6 +374,10 @@ impl TauriSession {
         session.lc.write().unwrap().initialize(id, conn_type);
 
         Self(session)
+    }
+    
+    pub fn inner(&self) -> Session<TauriHandler> {
+        self.0.clone()
     }
 
     fn get_custom_image_quality(&mut self) -> Vec<i32> {

@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::SystemTime,
@@ -203,6 +203,8 @@ pub struct PeerConfig {
     pub enable_file_transfer: bool,
     #[serde(default)]
     pub show_quality_monitor: bool,
+    #[serde(default)]
+    pub keyboard_mode: String,
 
     // The other scalar value must before this
     #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]
@@ -510,7 +512,12 @@ impl Config {
 
     #[inline]
     pub fn get_any_listen_addr() -> SocketAddr {
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0)
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)
+    }
+
+    #[inline]
+    pub fn get_any_listen_addr_v6() -> SocketAddr {
+        SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)
     }
 
     pub fn get_rendezvous_server() -> String {
