@@ -1,4 +1,4 @@
-import { Button, Center, Heading, Input, Stack } from "@chakra-ui/react"
+import { Box, Button, Center, Heading, Input, Stack, Wrap, WrapItem } from "@chakra-ui/react"
 import { invoke } from "@tauri-apps/api"
 import { listen } from "@tauri-apps/api/event"
 import { useEffect, useState } from "react"
@@ -95,7 +95,7 @@ const ConnectionManager = () => {
                 let conn = connection
                 conn.msgs.push({ name: "me", text: text, time: getNowStr()});
                 setConnection(conn)
-                invoke("send_msg", {id: conn.id, text: text}).then(console.log)
+                invoke("send_msg", {id: conn.id, text: text}).then()
                 // body.update();
             }
         });
@@ -104,7 +104,7 @@ const ConnectionManager = () => {
     const checkClickTime = (callback: any) => {
         if (connection){
             let click_callback_time = getTime();
-            invoke('check_click_time', { id: connection.id }).then(console.log)
+            invoke('check_click_time', { id: connection.id }).then()
             setTimeout(async () => {
                 let d = click_callback_time - await invoke<number>("get_click_time");
                 if (d > 120)
@@ -118,13 +118,10 @@ const ConnectionManager = () => {
     useEffect(() => {
         const listenEvents = async () => {
             const unlistenShowElevation = await listen('showElevation', (e: {
-                payload: [
-                    show: boolean
-                ]
+                payload: boolean
             }) => {
-                let show = e.payload[0] 
-                if (show !== showElevation) {
-                    setShowElevation(show)
+                if (e.payload !== showElevation) {
+                    setShowElevation(e.payload)
                     // update();
                 }
             })
@@ -166,8 +163,9 @@ const ConnectionManager = () => {
                     });
                     if (!name) name = "NA";
                     
-                    let newConn = new Connection(id, is_file_transfer, peer_id, port_forward, name, 
+                    let newConn = new Connection(id, is_file_transfer, port_forward, peer_id, name, 
                         authorized, keyboard, clipboard, audio, file, restart, recording)
+                    
                     if (idx < 0) {
                         let connArray = [...connections, newConn]
                         setConnections(connArray)
@@ -202,11 +200,28 @@ const ConnectionManager = () => {
         }
     }, [])
 
-    const elevate = async () => {
-        checkClickTime(async () => {
+    const elevateAccept = () => {
+        checkClickTime(function() {
+            if (connection) {
+                let conn = connection
+                conn.authorized = true
+                setConnection(conn)
+                setShowElevation(false)
+                // body.update();
+                invoke("elevate_portable", {id: connId}).then()
+                invoke("authorize", {id: connId}).then()
+                setTimeout(() => {
+                    window?.minimize()
+                }, 30);
+            }
+        });
+    }
+
+    const elevate = () => {
+        checkClickTime(function () {
             setShowElevation(false)
             // body.update()
-            await invoke("elevate_portable", {id: connId});
+            invoke("elevate_portable", {id: connId}).then()
             setTimeout(() => {
                 window?.minimize()
             }, 30);
@@ -338,36 +353,43 @@ const ConnectionManager = () => {
     // Body class
     const Manager = () => {
         if (connection) {
-            console.log("Manager", connection.is_file_transfer || connection.port_forward || connection.disconnected ? "not show" : "show")
             return (
-                <div>
-                    New connection!
-                    {connection.is_file_transfer || connection.port_forward || connection.disconnected ? "" : <div>Permissions</div>}
-                    {/* TODO: ? : <div> </div> - doesn't render */}
-                    {connection.is_file_transfer || connection.port_forward || connection.disconnected ? "" : <div> 
-                        <div className={!connection.keyboard ? "disabled" : ""} title={'Allow using keyboard and mouse'}><Button onClick={() => iconKeyboard()} /></div>
-                        <div className={!connection.clipboard ? "disabled" : ""} title={'Allow using clipboard'}><Button onClick={() => iconClipboard()} /></div>
-                        <div className={!connection.audio ? "disabled" : ""} title={'Allow hearing sound'}><Button onClick={() => iconAudio()} /></div>
-                        <div className={!connection.file ? "disabled" : ""} title={'Allow file copy and paste'}><Button onClick={() => iconFile()} /></div>
-                        <div className={!connection.restart ? "disabled" : ""} title={'Allow remote restart'}><Button onClick={() => iconRestart()} /></div>
-                        <div className={!connection.recording ? "disabled" : ""} title={'Allow recording session'}><Button onClick={() => iconRecording()} /></div>
-                    </div>
+                <Stack spacing='12px'>
+                    <Heading>New connection!</Heading>
+                    {connection.is_file_transfer || connection.port_forward || connection.disconnected ? "" : <Box>Permissions</Box>}
+                    {connection.is_file_transfer || connection.port_forward || connection.disconnected ? "" : <Wrap spacing='20px'>
+                        <WrapItem className={!connection.keyboard ? "disabled" : ""} title={'Allow using keyboard and mouse'}><Button onClick={() => iconKeyboard()} /></WrapItem>
+                        <WrapItem className={!connection.clipboard ? "disabled" : ""} title={'Allow using clipboard'}><Button onClick={() => iconClipboard()} /></WrapItem>
+                        <WrapItem className={!connection.audio ? "disabled" : ""} title={'Allow hearing sound'}><Button onClick={() => iconAudio()} /></WrapItem>
+                        <WrapItem className={!connection.file ? "disabled" : ""} title={'Allow file copy and paste'}><Button onClick={() => iconFile()} /></WrapItem>
+                        <WrapItem className={!connection.restart ? "disabled" : ""} title={'Allow remote restart'}><Button onClick={() => iconRestart()} /></WrapItem>
+                        <WrapItem className={!connection.recording ? "disabled" : ""} title={'Allow recording session'}><Button onClick={() => iconRecording()} /></WrapItem>
+                    </Wrap>
                     }
-                    {!connection.authorized && !connection.disconnected && showElevationBtn && showAcceptBtn ? <Button onClick={() => elevate()}>Elevate</Button> : "" }
-                    <div>
-                        {!connection.authorized && showAcceptBtn ? <Button onClick={() => accept()}>Accept</Button> : "" }
-                        {!connection.authorized ? <Button onClick={() => dismiss()}>Dismiss</Button> : "" }
-                    </div>
-                    {connection.authorized && !connection.disconnected ? <Button onClick={() => disconnect()}>Disconnect</Button> : "" }
-                    {connection.authorized && connection.disconnected ? <Button onClick={() => close()}>Close</Button> : "" }
-                </div>
+                    <Center>
+                        {!connection.authorized && !connection.disconnected && showElevationBtn && showAcceptBtn ? <Button onClick={() => elevateAccept()} bg='green.200'>Accept</Button>: "" }
+                        {connection.authorized && !connection.disconnected && showElevationBtn ? <Button onClick={() => elevate()}>Elevate</Button> : "" }
+                    </Center>
+                    <Center>
+                        <Wrap>
+                            <WrapItem>
+                                {!connection.authorized && showAcceptBtn ? <Button onClick={() => accept()}>Accept</Button> : "" }
+                            </WrapItem>
+                            <WrapItem>
+                                {!connection.authorized ? <Button onClick={() => dismiss()}>Dismiss</Button> : "" }
+                            </WrapItem>
+                        </Wrap>
+                    </Center>
+                    <Center>
+                        {connection.authorized && !connection.disconnected ? <Button onClick={() => disconnect()}>Disconnect</Button> : "" }
+                        {connection.authorized && connection.disconnected ? <Button onClick={() => close()}>Close</Button> : "" }
+                    </Center>
+                </Stack>
             )
         }
         else {
             return (
-                <div>
-                    Waiting for new connection ...
-                </div>
+                <Heading>Waiting for new connection ...</Heading>
             )
         }
     }
@@ -378,7 +400,6 @@ const ConnectionManager = () => {
             return
         }
         setConnection(connections[curIdx])
-        console.log("Manager: " + curIdx + connection)
 
         if (connection) {
             setConnId(connection.id)
@@ -388,11 +409,9 @@ const ConnectionManager = () => {
                 sendMsg(msg)
             }
             invoke<boolean>("can_elevate").then((canElevate: boolean)=>{
-                console.log("ShowElevationBtn: ", canElevate && showElevation && !connection.is_file_transfer && connection.port_forward.length === 0)
                 setShowElevationBtn(canElevate && showElevation && !connection.is_file_transfer && connection.port_forward.length === 0)
             }) 
             invoke<string>("get_option", {key: 'approve-mode'}).then((approve_mode: string) => {
-                console.log("ShowAcceptBtn: ", approve_mode !== 'password')
                 setShowAcceptBtn(approve_mode !== 'password')
             })            
         }
@@ -401,10 +420,7 @@ const ConnectionManager = () => {
     return (
         <Center h='100vh'>
             <Stack spacing='12px'>
-                <Heading>Connection manager</Heading>
-                <div>
-                    <Manager/>
-                </div>
+                <Manager/>
             </Stack>
         </Center>
     )
