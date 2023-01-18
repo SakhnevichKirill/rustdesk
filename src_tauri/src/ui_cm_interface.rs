@@ -181,7 +181,6 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
 }
 
 #[inline]
-#[tauri::command(async)]
 pub fn check_click_time(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::ClickTime(0)));
@@ -189,13 +188,11 @@ pub fn check_click_time(id: i32) {
 }
 
 #[inline]
-#[tauri::command(async)]
 pub fn get_click_time() -> i64 {
     CLICK_TIME.load(Ordering::SeqCst)
 }
 
 #[inline]
-#[tauri::command(async)]
 pub fn authorize(id: i32) {
     if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
         client.authorized = true;
@@ -204,7 +201,6 @@ pub fn authorize(id: i32) {
 }
 
 #[inline]
-#[tauri::command(async)]
 pub fn close(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::Close));
@@ -226,7 +222,6 @@ pub fn send_chat(id: i32, text: String) {
 }
 
 #[inline]
-#[tauri::command(async)]
 pub fn switch_permission(id: i32, name: String, enabled: bool) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
@@ -316,7 +311,15 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                             match data {
                                 Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, self.tx.clone());
+                                    use std::{thread, time::Duration};
+                                    
+                                    // TODO: implement callback for listen add_connection event receives or not
+                                    // Timeout
+                                    {
+                                        thread::sleep(std::time::Duration::new(2, 0));
+                                        self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, self.tx.clone());
+                                    }
+                                    log::info!("cm ipc connection established");
                                     self.authorized = authorized;
                                     self.conn_id = id;
                                     #[cfg(windows)]

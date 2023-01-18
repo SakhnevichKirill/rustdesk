@@ -26,7 +26,7 @@ use hbb_common::{
 
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
-use crate::{common::SOFTWARE_UPDATE_URL, ipc, ui::{show_remote_window, self}};
+use crate::{common::SOFTWARE_UPDATE_URL, ipc, ui::{show_window, self}};
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 type Message = RendezvousMessage;
@@ -49,6 +49,7 @@ lazy_static::lazy_static! {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn recent_sessions_updated() -> bool {
     let mut children = CHILDREN.lock().unwrap();
     if children.0 {
@@ -58,6 +59,13 @@ pub fn recent_sessions_updated() -> bool {
         false
     }
 }
+
+#[inline]
+#[tauri::command(async)]
+pub fn get_session_id_ipc() -> String {
+    ipc::get_id()
+}
+
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]

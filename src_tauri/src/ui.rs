@@ -55,31 +55,22 @@ fn set_app_handle(app_handle: tauri::AppHandle) {
     *APPHANDLE.lock().unwrap() = Some(app_handle);
 }
 
-pub fn create_main_window(app: &tauri::AppHandle) -> tauri::Window {
-    tauri::Window::builder(app, "main", tauri::WindowUrl::App("index.html".into()))
-        .title("Rustdesk")
+pub fn create_window(app: &tauri::AppHandle, label: &str, title: &str) -> tauri::Window {
+    tauri::Window::builder(app, label, tauri::WindowUrl::App("index.html".into()))
+        .title(title)
         .inner_size(700f64, 600f64)
         .center()
         .build()
         .unwrap()
 }
 
-fn create_remote_window(app: &tauri::AppHandle, id: &String) -> tauri::Window {
-    tauri::Window::builder(app, "remote", tauri::WindowUrl::App("index.html".into()))
-        .title(id)
-        .inner_size(700f64, 600f64)
-        .center()
-        .build()
-        .unwrap()
-}
-
-pub fn show_remote_window(app: &tauri::AppHandle) {
-    if let Some(remote_window) = app.get_window("remote") {
+pub fn show_window(app: &tauri::AppHandle, label: &str) {
+    if let Some(remote_window) = app.get_window(label) {
         remote_window.show().unwrap();
         remote_window.unminimize().unwrap();
         remote_window.set_focus().unwrap();
     } else {
-        create_remote_window(app, &"Undef".to_string());
+        create_window(app,  label, &"Undef".to_string());
     }
 }
 
@@ -113,19 +104,21 @@ pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
             .to_owned();
         args[1] = id;
     }
+    log::info!("args:{:?}", args);
     if args.is_empty() {
         let children: Children = Default::default();
         std::thread::spawn(move || check_zombie(children));
         // TODO:
         //  crate::common::check_software_update();
         page = "index.html";
-        create_main_window(app);
-        app.get_window("main").unwrap().open_devtools();
-
+        create_window(app, "main", "Rustdesk");
     } else if args[0] == "--install" {
         page = "install.html";
     } else if args[0] == "--cm" {
         // Implemetation "connection-manager" behavior using tauri state manager
+        let remote = create_window(app, "cm", "Rustdesk");
+        // remote.hide().unwrap();
+        remote.open_devtools();
         app.manage(Mutex::new(cm::TauriConnectionManager::new())); //TODO: Move app to static
         page = "cm.html";
     } else if (args[0] == "--connect"
@@ -139,7 +132,7 @@ pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
         let id = iter.next().unwrap().clone();
         let pass = iter.next().unwrap_or(&"".to_owned()).clone();
         let args: Vec<String> = iter.map(|x| x.clone()).collect();
-        let remote = create_remote_window(&app, &id);
+        let remote = create_window(app, "remote", &id);
         #[cfg(windows)]
         {
             let hw = get_hwnd(remote).unwrap();
@@ -171,7 +164,6 @@ pub fn start(app: &tauri::AppHandle, args: &mut [String]) {
         };
         frame.load_html(html.as_bytes(), Some(page));
     }
-    log::info!("page: {} args:{:?}", page, args);
     // #[cfg(not(feature = "inline"))]
     // window.load_file(&format!(
     //     "file://{}/src/ui/{}",

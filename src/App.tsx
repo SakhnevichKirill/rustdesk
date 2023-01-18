@@ -4,6 +4,7 @@ import theme from "./theme/index"
 
 import Remotes from './pages/Remotes'
 import Remote from './pages/Remote'
+import ConnectionManager from "./pages/cm"
 
 import { window as TWindow } from '@tauri-apps/api'
 
@@ -21,6 +22,7 @@ const App = () => {
           <Routes>
             <Route path='/main' element={<Remotes />} />
             <Route path='/remote' element={<Remote />} />
+            <Route path='/cm' element={<ConnectionManager />} />
           </Routes>
         </ChakraProvider>
       </BrowserRouter>

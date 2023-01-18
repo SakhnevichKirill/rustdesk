@@ -1,8 +1,9 @@
+mod tauri_connection_manager;
 mod tauri_session_handler;
 use hbb_common::config;
 use tauri::{Builder, Wry};
 
-use crate::{ui_interface, ui_cm_interface};
+use crate::{ui_interface};
 
 #[tauri::command(async)]
 fn exit(app: tauri::AppHandle) {
@@ -54,21 +55,6 @@ fn centerize(window: tauri::Window, mut w: u32, mut h: u32) {
 }
 
 
-#[tauri::command(async)]
-fn remove_disconnected_connection(id: i32) {
-    ui_cm_interface::remove(id);
-}
-
-#[tauri::command(async)]
-fn quit() {
-    crate::platform::quit_gui();
-}
-
-#[tauri::command(async)]
-fn send_msg(id: i32, text: String) {
-    ui_cm_interface::send_chat(id, text);
-}
-
 pub fn invoke_handler(builder: Builder<Wry>) -> Builder<Wry>{
     builder.invoke_handler(tauri::generate_handler![
         exit,
@@ -87,6 +73,8 @@ pub fn invoke_handler(builder: Builder<Wry>) -> Builder<Wry>{
         ui_interface::update_temporary_password, // update temporary password
         ui_interface::permanent_password, // get permanent password
         ui_interface::set_permanent_password, // set permanent password
+        ui_interface::recent_sessions_updated,
+        ui_interface::get_session_id_ipc,
         ui_interface::get_remote_id,
         ui_interface::set_remote_id,
         ui_interface::closing, // set config size
@@ -219,13 +207,15 @@ pub fn invoke_handler(builder: Builder<Wry>) -> Builder<Wry>{
         tauri_session_handler::supported_hwcodec,
         tauri_session_handler::change_prefer_codec,
         tauri_session_handler::restart_remote_device,
-        ui_cm_interface::check_click_time,
-        ui_cm_interface::get_click_time,
-        ui_cm_interface::close,
-        remove_disconnected_connection,
-        quit,
-        ui_cm_interface::authorize,
-        ui_cm_interface::switch_permission,
-        send_msg,
+        tauri_connection_manager::check_click_time,
+        tauri_connection_manager::get_click_time,
+        tauri_connection_manager::switch_permission,
+        tauri_connection_manager::close,
+        tauri_connection_manager::remove_disconnected_connection,
+        tauri_connection_manager::quit,
+        tauri_connection_manager::authorize,
+        tauri_connection_manager::send_msg,
+        tauri_connection_manager::can_elevate,
+        tauri_connection_manager::elevate_portable,    
         ])
 }
