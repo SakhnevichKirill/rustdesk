@@ -15,7 +15,20 @@ pub struct TauriHandler;
 
 impl InvokeUiCM for TauriHandler {
     fn add_connection(&self, client: &crate::ui_cm_interface::Client) {
-        self.call_tauri("addConnection", client);
+        self.call_tauri("addConnection", (
+            client.id,
+            client.is_file_transfer,
+            client.port_forward.clone(),
+            client.peer_id.clone(),
+            client.name.clone(),
+            client.authorized,
+            client.keyboard,
+            client.clipboard,
+            client.audio,
+            client.file,
+            client.restart,
+            client.recording
+        ));
     }
 
     fn remove_connection(&self, id: i32, close: bool) {
@@ -45,10 +58,11 @@ impl InvokeUiCM for TauriHandler {
 impl TauriHandler {
     #[inline]
     fn call_tauri<S: Serialize + Clone>(&self, event: &str, payload: S) {
-        let app_handle: Option<tauri::AppHandle> = get_app_handle();
+        let app_handle = get_app_handle();
         match app_handle {
             Some(app) => {
-                app.emit_all(event, payload).unwrap();
+                let window = app.get_window("cm").unwrap();
+                window.emit(event, payload).unwrap();
             }
             None => {
                 log::info!("Waiting to get app handle for macro to execute...");
@@ -84,35 +98,35 @@ impl TauriConnectionManager {
         crate::get_icon()
     }
 
-    fn check_click_time(&mut self, id: i32) {
+    pub fn check_click_time(&mut self, id: i32) {
         crate::ui_cm_interface::check_click_time(id);
     }
 
-    fn get_click_time(&self) -> f64 {
+    pub fn get_click_time(&self) -> f64 {
         crate::ui_cm_interface::get_click_time() as _
     }
 
-    fn switch_permission(&self, id: i32, name: String, enabled: bool) {
+    pub fn switch_permission(&self, id: i32, name: String, enabled: bool) {
         crate::ui_cm_interface::switch_permission(id, name, enabled);
     }
 
-    fn close(&self, id: i32) {
+    pub fn close(&self, id: i32) {
         crate::ui_cm_interface::close(id);
     }
 
-    fn remove_disconnected_connection(&self, id: i32) {
+    pub fn remove_disconnected_connection(&self, id: i32) {
         crate::ui_cm_interface::remove(id);
     }
 
-    fn quit(&self) {
+    pub fn quit(&self) {
         crate::platform::quit_gui();
     }
 
-    fn authorize(&self, id: i32) {
+    pub fn authorize(&self, id: i32) {
         crate::ui_cm_interface::authorize(id);
     }
 
-    fn send_msg(&self, id: i32, text: String) {
+    pub fn send_msg(&self, id: i32, text: String) {
         crate::ui_cm_interface::send_chat(id, text);
     }
 
@@ -120,15 +134,15 @@ impl TauriConnectionManager {
         crate::client::translate(name)
     }
 
-    fn can_elevate(&self) -> bool {
+    pub fn can_elevate(&self) -> bool {
         crate::ui_cm_interface::can_elevate()
     }
 
-    fn elevate_portable(&self, id: i32) {
+    pub fn elevate_portable(&self, id: i32) {
         crate::ui_cm_interface::elevate_portable(id);
     }
 
-    fn get_option(&self, key: String) -> String {
+    pub fn get_option(&self, key: String) -> String {
         crate::ui_interface::get_option(key)
     }
 }

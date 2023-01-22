@@ -29,11 +29,13 @@ def parse_rc_features(feature):
         'IddDriver': {
             'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1/RustDeskIddDriver_x64_pic_en.zip',
             'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1/checksum_md5',
+            'exclude': ['README.md'],
         },
         'PrivacyMode': {
             'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1'
                        '/TempTopMostWindow_x64_pic_en.zip',
             'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1/checksum_md5',
+            'include': ['WindowInjection.dll'],
         }
     }
     apply_features = {}

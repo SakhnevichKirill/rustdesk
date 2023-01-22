@@ -1,142 +1,127 @@
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Box, Center, CircularProgress, Text } from '@chakra-ui/react'
 
 import { invoke } from '@tauri-apps/api'
 import { listen } from '@tauri-apps/api/event'
+import { appWindow } from '@tauri-apps/api/window'
+
 
 const Remote = () => {
     const [connectionLoading, setConnecitonLoading] = useState(true)
     const [msg, setMsg] = useState("")
     const [connectionSpeed, setConnectionSpeed] = useState("")
 
-    const videoRef = useRef<HTMLVideoElement | null>(null)
-    const mediaSource = useMemo(() => new MediaSource(), [])
-    let mediaSrcBuffer: SourceBuffer | null = null
-
     const [remoteDim, setRemoteDim] = useState({ width: 0, height: 0 })
     const [pixels, setPixels] = useState<Uint8ClampedArray>(new Uint8ClampedArray([0]))
-
-    useEffect(() => {
-        const video = videoRef.current
-        if ('MediaSource' in window && video) {
-            video.src = URL.createObjectURL(mediaSource)
-            mediaSource.addEventListener('sourceopen', handleSourceOpen)
-            return () => {
-                mediaSource.removeEventListener('sourceopen', handleSourceOpen)
-            };
-        } else
-            console.error('Doesnt support MediaSource')
-    }, [mediaSource])
-
-    const handleSourceOpen = () => {
-       mediaSrcBuffer = mediaSource.addSourceBuffer('video/webm; codecs="vp9"')
-    }
-
-    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    const [reconnectTimeout, setReconnectTimeout] = useState(1000) 
 
     useEffect(() => {
         const listenEvents = async () => {
             setConnecitonLoading(true)
-            await invoke('reconnect')
-            
-            const unlistenRecord = await listen('on_record', async (e: { payload: { data: number[] }[] }) => {
-                console.log(e)
 
-                // Init video recording to WebM and encoded_frames emitter
-                await invoke('refresh_video') 
-                await invoke('record_screen', { start: true, w: remoteDim.width, h: remoteDim.height }) 
+            // TODO: emit on "video#handler" init
+            appWindow.emit('native-remote')
 
-                // Wait for 10 seconds
-                await sleep(10000)
-
-                // Stop recording and write tail of video
-                // TODO: tail of video written wrong
-                await invoke('record_screen', { start: false, w: remoteDim.width, h: remoteDim.height })
+            const unlistenNativeRemoteResponse = await listen('native-remote-response', (e: { payload: any }) => {
+                console.log("reconnect")
+                retryConnect()
             })
-            invoke('record_screen', { start: false, w: remoteDim.width, h: remoteDim.height })
 
-            // FIXME for every tauri e type I need to e: {payload: {...}}
-            // TODO: fix payload to [EncodedVideoFrame]
-            const unlistenEncodedFrames = await listen('encoded_frames', (e: { payload: { data: number[] }[] }) => {
-                console.log(e)
-                // // TODO могут данные прийти, а буфера нет открылось?
-                // if (mediaSrcBuffer) {
-                //     const binArr = new Uint8Array(e.payload[0].data)
-                //     mediaSrcBuffer.appendBuffer(binArr.buffer)
-                // }
-            })
+            const connecting = () => {
+                // TODO: implement msgbox
+                // handler.msgbox("connecting", "Connecting...", "Connection in progress. Please wait.")
+            }
+
+            const retryConnect = (cancelTimer: boolean = false) => {
+                invoke<boolean>("is_port_forward").then((is_port_forward) => {
+                    if (cancelTimer) setTimeout(retryConnect, 0)
+                    if (!is_port_forward) connecting()
+                    invoke("reconnect").then()
+                    console.log("reconnect")
+                })
+            }
 
             const unlistenMsgboxRetry = await listen('msgbox_retry', (e: {
                 payload: [
-                    // FIXME Im not sure about this fields names
-                    status: string, statusMsg: string, connectionMsg: string, idkMsg: string, idkBool: boolean
+                    type: string, title: string, text: string, link: string, hasRetry: boolean
                 ]
-            }) => {
-                const status = e.payload[0]
-                if (status === 'success') {
-                    setConnecitonLoading(false)
-                    setMsg("")
-                }
-                if (status === 'input-password') setMsg('Подтвердите подключение')
-            })
-            const unlistenSetDisplay = await listen('setDisplay', (e: { payload: [x: number, y: number, w: number, h: number] }) => {
-                const width = e.payload[2]
-                const height = e.payload[3]
-                setRemoteDim({ width, height })
-            })
-            const unlistenNativeRemote = await listen('native-remote', (e: { payload: Uint8ClampedArray }) => {
-                setPixels(new Uint8ClampedArray(e.payload))
-            })
-            const unlistenUpdateQualityStatus = await listen('updateQualityStatus', (e: { payload: string[] }) => {
-                setConnectionSpeed(e.payload[0])
-            })
+                }) => {
+                    const type = e.payload[0]
+                    // const title = e.payload[1]
+                    // const text = e.payload[2]
+                    // const link = e.payload[3]
+                    const hasRetry = e.payload[4]
+                    
+                    
+                    if (type) {
+                        setConnecitonLoading(false)
+                        setMsg("")
+                    }
+                    if (type === 'input-password') setMsg('Подтвердите подключение')
 
-            return { unlistenRecord, unlistenSetDisplay, unlistenNativeRemote, unlistenMsgboxRetry, unlistenUpdateQualityStatus, unlistenEncodedFrames }
+                    // TODO: implement msgbox
+                    // handler.msgbox(type, title, text, link, hasRetry)
+                    if (hasRetry) {
+                        setTimeout(retryConnect, 0)
+                        setTimeout(retryConnect, reconnectTimeout)
+                        setReconnectTimeout(reconnectTimeout * 2)
+                    } else {
+                        setReconnectTimeout(1000)
+                    }
+                })
+            const unlistenSetDisplay = await listen('setDisplay', (e: { payload: [x: number, y: number, w: number, h: number] }) => {
+                    setRemoteDim({ width: e.payload[2], height: e.payload[3] })
+                })
+            const unlistenRenderFrame = await listen('render_frame', (e: { payload: Uint8ClampedArray }) => {
+                    setPixels(new Uint8ClampedArray(e.payload))
+                })
+            const unlistenUpdateQualityStatus = await listen('updateQualityStatus', (e: {payload: string[]}) => {
+                    setConnectionSpeed(e.payload[0])
+                })
+
+            return {unlistenNativeRemoteResponse, unlistenMsgboxRetry, unlistenSetDisplay, unlistenRenderFrame, unlistenUpdateQualityStatus}
         }
 
         const unlisten = listenEvents().catch(() => null)
 
         return () => {
-            // FIXME It's awkward write every func, better to use array
-            unlisten.then(unl => {
-                if (unl) {
-                    unl.unlistenRecord()
-                    unl.unlistenNativeRemote()
-                    unl.unlistenSetDisplay()
-                    unl.unlistenMsgboxRetry()
-                    unl.unlistenUpdateQualityStatus()
-                    unl.unlistenEncodedFrames()
-                }
-            })
+           unlisten.then(unl => {
+              if (unl) {
+                unl.unlistenNativeRemoteResponse()
+                unl.unlistenMsgboxRetry()
+                unl.unlistenSetDisplay()
+                unl.unlistenRenderFrame()
+                unl.unlistenUpdateQualityStatus()
+              } 
+           }) 
         }
     }, [])
 
     useEffect(() => {
-        const { width, height } = remoteDim
+        const { width, height} = remoteDim
         if (width && height && pixels.length > 1) {
             const imageData = new ImageData(pixels, width, height, {
-                colorSpace: "srgb"
+                colorSpace: "srgb" 
             })
             const canvas = document.getElementById('canvas') as HTMLCanvasElement
-            const ctx = canvas?.getContext('2d');
+            const ctx = canvas?.getContext('2d')
             if (ctx) {
                 ctx.putImageData(imageData, 0, 0)
             }
         }
     }, [remoteDim, pixels])
-
+    
     return (
         <Center h="100vh">
             <Text pos='absolute' left={0} top={0} color='red'>{connectionSpeed}</Text>
             <Box height='100%'>
                 {connectionLoading ?
-                    <>"Подключаемся... "<CircularProgress isIndeterminate /></> :
+                    <>"Подключаемся... "<CircularProgress isIndeterminate/></> :
                     <canvas id="canvas" width={1690} height={1122}></canvas>
                 }
                 <Text>{msg}</Text>
             </Box>
-            <video ref={videoRef}/>
         </Center>
     )
 }

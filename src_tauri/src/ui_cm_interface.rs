@@ -181,7 +181,6 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
 }
 
 #[inline]
-#[tauri::command(async)]
 pub fn check_click_time(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::ClickTime(0)));
@@ -189,13 +188,11 @@ pub fn check_click_time(id: i32) {
 }
 
 #[inline]
-#[tauri::command(async)]
 pub fn get_click_time() -> i64 {
     CLICK_TIME.load(Ordering::SeqCst)
 }
 
 #[inline]
-#[tauri::command(async)]
 pub fn authorize(id: i32) {
     if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
         client.authorized = true;
@@ -204,7 +201,6 @@ pub fn authorize(id: i32) {
 }
 
 #[inline]
-#[tauri::command(async)]
 pub fn close(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::Close));
@@ -226,7 +222,6 @@ pub fn send_chat(id: i32, text: String) {
 }
 
 #[inline]
-#[tauri::command(async)]
 pub fn switch_permission(id: i32, name: String, enabled: bool) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
@@ -329,7 +324,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::Close => {
                                     #[cfg(windows)]
                                     self.enable_cliprdr_file_context(self.conn_id, false).await;
-                                    log::info!("cm ipc connection closed from connection request");
                                     break;
                                 }
                                 Data::Disconnected => {

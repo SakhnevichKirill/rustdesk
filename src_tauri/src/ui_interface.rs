@@ -26,7 +26,7 @@ use hbb_common::{
 
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
-use crate::{common::SOFTWARE_UPDATE_URL, ipc, ui::{show_remote_window, self}};
+use crate::{common::SOFTWARE_UPDATE_URL, ipc, ui::{show_window, self}};
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 type Message = RendezvousMessage;
@@ -49,6 +49,7 @@ lazy_static::lazy_static! {
 }
 
 #[inline]
+#[tauri::command(async)]
 pub fn recent_sessions_updated() -> bool {
     let mut children = CHILDREN.lock().unwrap();
     if children.0 {
@@ -58,6 +59,13 @@ pub fn recent_sessions_updated() -> bool {
         false
     }
 }
+
+#[inline]
+#[tauri::command]
+pub fn get_session_id_ipc() -> String {
+    ipc::get_id()
+}
+
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
@@ -449,6 +457,7 @@ pub fn is_installed_lower_version() -> bool {
 #[inline]
 #[tauri::command(async)]
 pub fn closing(x: i32, y: i32, w: i32, h: i32) {
+    log::info!("closing");
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::server::input_service::fix_key_down_timeout_at_exit();
     LocalConfig::set_size(x, y, w, h);
@@ -605,7 +614,7 @@ pub fn is_process_trusted(_prompt: bool) -> bool {
 }
 
 #[inline]
-#[tauri::command(async)]
+#[tauri::command]
 pub fn is_can_screen_recording(_prompt: bool) -> bool {
     #[cfg(target_os = "macos")]
     return crate::platform::macos::is_can_screen_recording(_prompt);
@@ -1001,8 +1010,10 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
     let mut mouse_time = 0;
     let mut id = "".to_owned();
     loop {
+        log::info!("check_connect_status_");
         if let Ok(mut c) = ipc::connect(1000, "").await {
             let mut timer = time::interval(time::Duration::from_secs(1));
+            log::info!("check_connect_status_ ok");
             loop {
                 tokio::select! {
                     res = c.next() => {

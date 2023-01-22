@@ -204,7 +204,7 @@ impl InvokeUiSession for TauriHandler {
     }
 
     fn on_rgba(&self, data: &[u8]) {
-        self.call_tauri("native-remote", data);
+        self.call_tauri("render_frame", data);
         // VIDEO
         //     .lock()
         //     .unwrap()

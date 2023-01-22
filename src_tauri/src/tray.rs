@@ -78,7 +78,7 @@ pub fn start_tray_tauri(builder: Builder<Wry>) -> Builder<Wry>{
         }
         tauri::SystemTrayEvent::MenuItemClick { id, .. } => {
             match id.as_str() {
-                "remote" => ui::show_remote_window(app),
+                "remote" => ui::show_window(app, "remote"),
                 "quit" => {
                     let app = app.clone();
                     std::thread::spawn(move || app.exit(0));

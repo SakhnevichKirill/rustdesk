@@ -706,6 +706,7 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
 }
 
 async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
+    log::info!("get_options_");
     let mut c = connect(ms_timeout, "").await?;
     c.send(&Data::Options(None)).await?;
     if let Some(Data::Options(Some(value))) = c.next_timeout(ms_timeout).await? {
@@ -745,6 +746,7 @@ pub fn set_option(key: &str, value: &str) {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
+    log::info!("set_options");
     if let Ok(mut c) = connect(1000, "").await {
         c.send(&Data::Options(Some(value.clone()))).await?;
         // do not put below before connect, because we need to check should_exit
@@ -756,6 +758,7 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
 
 #[inline]
 async fn get_nat_type_(ms_timeout: u64) -> ResultType<i32> {
+    log::info!("get_nat_type_");
     let mut c = connect(ms_timeout, "").await?;
     c.send(&Data::NatType(None)).await?;
     if let Some(Data::NatType(Some(value))) = c.next_timeout(ms_timeout).await? {
@@ -781,6 +784,7 @@ pub async fn get_rendezvous_servers(ms_timeout: u64) -> Vec<String> {
 
 #[inline]
 async fn get_socks_(ms_timeout: u64) -> ResultType<Option<config::Socks5Server>> {
+    log::info!("get_socks_");
     let mut c = connect(ms_timeout, "").await?;
     c.send(&Data::Socks(None)).await?;
     if let Some(Data::Socks(value)) = c.next_timeout(ms_timeout).await? {
@@ -807,6 +811,7 @@ pub async fn set_socks(value: config::Socks5Server) -> ResultType<()> {
     } else {
         Some(value.clone())
     });
+    log::info!("set_socks");
     connect(1_000, "")
         .await?
         .send(&Data::Socks(Some(value)))
