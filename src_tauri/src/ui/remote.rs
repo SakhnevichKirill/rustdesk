@@ -217,8 +217,9 @@ impl InvokeUiSession for TauriHandler {
     }
 
     // on encoded_frames frontend decods frames to RGBA
-    fn on_encoded_frames(&self, encoded_frames: &[EncodedVideoFrame]) {
-        self.call_tauri("encoded_frames", encoded_frames);
+    fn on_encoded_frames(&self, encoded_frame: &EncodedVideoFrame) {
+        // log::info!("on_encoded_frames {:#?}", encoded_frame);
+        self.call_tauri("encoded_frames", encoded_frame);
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {

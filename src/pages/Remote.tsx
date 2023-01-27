@@ -6,6 +6,21 @@ import { invoke } from '@tauri-apps/api'
 import { listen } from '@tauri-apps/api/event'
 import { appWindow } from '@tauri-apps/api/window'
 
+class EncodedFrame {
+    data: Uint8Array //Uint8ClampedArray 
+    key: boolean
+    pts: number
+    constructor(
+        data: Uint8Array,
+        key: boolean,
+        pts: number,
+    ) {
+        this.data = data
+        this.key = key
+        this.pts = pts
+    }
+}
+
 
 const Remote = () => {
     const [connectionLoading, setConnecitonLoading] = useState(true)
@@ -15,6 +30,7 @@ const Remote = () => {
     const [remoteDim, setRemoteDim] = useState({ width: 0, height: 0 })
     const [pixels, setPixels] = useState<Uint8ClampedArray>(new Uint8ClampedArray([0]))
     const [reconnectTimeout, setReconnectTimeout] = useState(1000) 
+    const [initMuxer, setInitMuxer] = useState<boolean>(false)
 
     useEffect(() => {
         const listenEvents = async () => {
@@ -24,7 +40,6 @@ const Remote = () => {
             appWindow.emit('native-remote')
 
             const unlistenNativeRemoteResponse = await listen('native-remote-response', (e: { payload: any }) => {
-                console.log("reconnect")
                 retryConnect()
             })
 
@@ -46,39 +61,39 @@ const Remote = () => {
                 payload: [
                     type: string, title: string, text: string, link: string, hasRetry: boolean
                 ]
-                }) => {
-                    const type = e.payload[0]
-                    // const title = e.payload[1]
-                    // const text = e.payload[2]
-                    // const link = e.payload[3]
-                    const hasRetry = e.payload[4]
-                    
-                    
-                    if (type) {
-                        setConnecitonLoading(false)
-                        setMsg("")
-                    }
-                    if (type === 'input-password') setMsg('Подтвердите подключение')
+            }) => {
+                const type = e.payload[0]
+                // const title = e.payload[1]
+                // const text = e.payload[2]
+                // const link = e.payload[3]
+                const hasRetry = e.payload[4]
+                
+                
+                if (type) {
+                    setConnecitonLoading(false)
+                    setMsg("")
+                }
+                if (type === 'input-password') setMsg('Подтвердите подключение')
 
-                    // TODO: implement msgbox
-                    // handler.msgbox(type, title, text, link, hasRetry)
-                    if (hasRetry) {
-                        setTimeout(retryConnect, 0)
-                        setTimeout(retryConnect, reconnectTimeout)
-                        setReconnectTimeout(reconnectTimeout * 2)
-                    } else {
-                        setReconnectTimeout(1000)
-                    }
-                })
+                // TODO: implement msgbox
+                // handler.msgbox(type, title, text, link, hasRetry)
+                if (hasRetry) {
+                    setTimeout(retryConnect, 0)
+                    setTimeout(retryConnect, reconnectTimeout)
+                    setReconnectTimeout(reconnectTimeout * 2)
+                } else {
+                    setReconnectTimeout(1000)
+                }
+            })
             const unlistenSetDisplay = await listen('setDisplay', (e: { payload: [x: number, y: number, w: number, h: number] }) => {
-                    setRemoteDim({ width: e.payload[2], height: e.payload[3] })
-                })
+                setRemoteDim({ width: e.payload[2], height: e.payload[3] })
+            })
             const unlistenRenderFrame = await listen('render_frame', (e: { payload: Uint8ClampedArray }) => {
-                    setPixels(new Uint8ClampedArray(e.payload))
-                })
+                setPixels(new Uint8ClampedArray(e.payload))
+            })
             const unlistenUpdateQualityStatus = await listen('updateQualityStatus', (e: {payload: string[]}) => {
-                    setConnectionSpeed(e.payload[0])
-                })
+                setConnectionSpeed(e.payload[0])
+            })
 
             return {unlistenNativeRemoteResponse, unlistenMsgboxRetry, unlistenSetDisplay, unlistenRenderFrame, unlistenUpdateQualityStatus}
         }
@@ -99,17 +114,50 @@ const Remote = () => {
     }, [])
 
     useEffect(() => {
-        const { width, height} = remoteDim
-        if (width && height && pixels.length > 1) {
-            const imageData = new ImageData(pixels, width, height, {
-                colorSpace: "srgb" 
+        const listenEvents = async () => {
+            const unlistenEncodedFrames = await listen('encoded_frames', (e: { payload: EncodedFrame }) => {
+
+                // tmp_muxer.addVideoChunkRaw(
+                //     e.payload.data,
+                //     e.payload.key == true ? 'key' : 'delta',
+                //     e.payload.pts,
+                //     {decoderConfig: {codec: 'vp9' }}
+                // )
+
+                
+                // setPixels(new Uint8ClampedArray(e.payload))
             })
-            const canvas = document.getElementById('canvas') as HTMLCanvasElement
-            const ctx = canvas?.getContext('2d')
-            if (ctx) {
-                ctx.putImageData(imageData, 0, 0)
-            }
+            return {unlistenEncodedFrames}
         }
+
+        const unlisten = listenEvents().catch(() => null)
+
+        return () => {
+           unlisten.then(unl => {
+              if (unl) {
+                unl.unlistenEncodedFrames()
+              } 
+           }) 
+        }
+    }, [initMuxer])
+
+    useEffect(() => {
+        console.log("remoteDim", remoteDim)
+        // TODO:
+        // Create a muxer with a video track running the VP9 codec, and no
+        // audio track. The muxed file is written to a buffer in memory.
+
+        // const { width, height} = remoteDim
+        // if (width && height && pixels.length > 1) {
+        //     const imageData = new ImageData(pixels, width, height, {
+        //         colorSpace: "srgb" 
+        //     })
+        //     const canvas = document.getElementById('canvas') as HTMLCanvasElement
+        //     const ctx = canvas?.getContext('2d')
+        //     if (ctx) {
+        //         ctx.putImageData(imageData, 0, 0)
+        //     }
+        // }
     }, [remoteDim, pixels])
     
     return (

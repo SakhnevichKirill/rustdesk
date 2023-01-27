@@ -796,7 +796,7 @@ impl AudioHandler {
 pub struct VideoHandler {
     decoder: Decoder,
     latency_controller: Arc<Mutex<LatencyController>>,
-    pub frames: ::std::vec::Vec<EncodedVideoFrame>,
+    pub frames: EncodedVideoFrame,
     pub rgb: Vec<u8>,
     recorder: Arc<Mutex<Option<Recorder>>>,
     record: bool,
@@ -839,7 +839,15 @@ impl VideoHandler {
                         .as_mut()
                         .map(|r| r.write_frame(frame));
                 }
-                res
+                match res {
+                    Ok(r) => {
+                        self.frames = r.1;
+                        return Ok(r.0);
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
             }
             _ => Ok(false),
         }
@@ -1527,7 +1535,7 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
 pub fn start_video_audio_threads<F>(video_callback: F) -> (MediaSender, MediaSender)
 where
-    F: 'static + FnMut(&[u8], &[EncodedVideoFrame]) + Send,
+    F: 'static + FnMut(&[u8], &EncodedVideoFrame) + Send,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
     let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
