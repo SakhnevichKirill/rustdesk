@@ -14,28 +14,25 @@ use hbb_common::{
     tokio::{self, sync::mpsc, time},
 };
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use hbb_common::{
     config::{RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
-    log,
     protobuf::Message as _,
     rendezvous_proto::*,
-    tcp::FramedStream,
 };
 
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
-use crate::{common::SOFTWARE_UPDATE_URL, ipc, ui::{show_window, self}};
+use crate::{common::SOFTWARE_UPDATE_URL, ipc};
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+use crate::ui::CHILDREN;
+
 type Message = RendezvousMessage;
 
 pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
 type Status = (i32, bool, i64, String); // (status_num, key_confirmed, mouse_time, id)
 
 lazy_static::lazy_static! {
-    static ref CHILDREN : Children = Default::default();
     static ref UI_STATUS : Arc<Mutex<Status>> = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
     static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
@@ -225,6 +222,18 @@ pub fn set_local_flutter_config(key: String, value: String) {
     LocalConfig::set_flutter_config(key, value);
 }
 
+#[cfg(feature = "flutter")]
+#[inline]
+pub fn get_kb_layout_type() -> String {
+    LocalConfig::get_kb_layout_type()
+}
+
+#[cfg(feature = "flutter")]
+#[inline]
+pub fn set_kb_layout_type(kb_layout_type: String) {
+    LocalConfig::set_kb_layout_type(kb_layout_type);
+}
+
 #[inline]
 pub fn peer_has_password(id: String) -> bool {
     !PeerConfig::load(&id).password.is_empty()
@@ -260,7 +269,8 @@ pub fn set_peer_option(id: String, name: String, value: String) {
 #[inline]
 #[tauri::command(async)]
 pub fn using_public_server() -> bool {
-    crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
+    option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty()
+        && crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
 }
 
 #[inline]
@@ -565,7 +575,7 @@ pub fn get_recent_sessions() -> Vec<(String, SystemTime, PeerConfig)> {
 #[tauri::command(async)]
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 pub fn get_icon() -> String {
-    crate::get_icon()
+    crate::ui::get_icon()
 }
 
 #[inline]
@@ -573,6 +583,7 @@ pub fn get_icon() -> String {
 pub fn remove_peer(id: String) {
     PeerConfig::remove(&id);
 }
+
 
 #[inline]
 #[tauri::command(async)]
@@ -632,6 +643,15 @@ pub fn is_installed_daemon(_prompt: bool) -> bool {
 }
 
 #[inline]
+#[cfg(feature = "flutter")]
+pub fn is_can_input_monitoring(_prompt: bool) -> bool {
+    #[cfg(target_os = "macos")]
+    return crate::platform::macos::is_can_input_monitoring(_prompt);
+    #[cfg(not(target_os = "macos"))]
+    return true;
+}
+
+#[inline]
 #[tauri::command(async)]
 pub fn get_error() -> String {
     #[cfg(not(any(feature = "cli")))]
@@ -644,9 +664,9 @@ pub fn get_error() -> String {
         if dtype != "x11" {
             return format!(
                 "{} {}, {}",
-                t("Unsupported display server ".to_owned()),
+                crate::client::translate("Unsupported display server ".to_owned()),
                 dtype,
-                t("x11 expected".to_owned()),
+                crate::client::translate("x11 expected".to_owned()),
             );
         }
     }
@@ -792,29 +812,13 @@ pub fn get_uuid() -> String {
     base64::encode(hbb_common::get_uuid())
 }
 
-#[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-pub fn open_url(url: String) {
-    #[cfg(windows)]
-    let p = "explorer";
-    #[cfg(target_os = "macos")]
-    let p = "open";
-    #[cfg(target_os = "linux")]
-    let p = if std::path::Path::new("/usr/bin/firefox").exists() {
-        "firefox"
-    } else {
-        "xdg-open"
-    };
-    allow_err!(std::process::Command::new(p).arg(url).spawn());
-}
-
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn change_id(id: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     let old_id = get_id();
     std::thread::spawn(move || {
-        *ASYNC_JOB_STATUS.lock().unwrap() = change_id_(id, old_id).to_owned();
+        *ASYNC_JOB_STATUS.lock().unwrap() = change_id_shared(id, old_id).to_owned();
     });
 }
 
@@ -1001,7 +1005,19 @@ pub fn account_auth_result() -> String {
     serde_json::to_string(&account::OidcSession::get_result()).unwrap_or_default()
 }
 
-// notice: avoiding create ipc connecton repeatly,
+#[cfg(feature = "flutter")]
+pub fn set_user_default_option(key: String, value: String) {
+    use hbb_common::config::UserDefaultConfig;
+    UserDefaultConfig::load().set(key, value);
+}
+
+#[cfg(feature = "flutter")]
+pub fn get_user_default_option(key: String) -> String {
+    use hbb_common::config::UserDefaultConfig;
+    UserDefaultConfig::load().get(&key)
+}
+
+// notice: avoiding create ipc connection repeatedly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
@@ -1010,10 +1026,8 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
     let mut mouse_time = 0;
     let mut id = "".to_owned();
     loop {
-        log::info!("check_connect_status_");
         if let Ok(mut c) = ipc::connect(1000, "").await {
             let mut timer = time::interval(time::Duration::from_secs(1));
-            log::info!("check_connect_status_ ok");
             loop {
                 tokio::select! {
                     res = c.next() => {
@@ -1084,14 +1098,11 @@ pub(crate) async fn send_to_cm(data: &ipc::Data) {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 const INVALID_FORMAT: &'static str = "Invalid format";
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 const UNKNOWN_ERROR: &'static str = "Unknown error";
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[tokio::main(flavor = "current_thread")]
-async fn change_id_(id: String, old_id: String) -> &'static str {
+pub async fn change_id_shared(id: String, old_id: String) -> &'static str {
     if !hbb_common::is_valid_custom_id(&id) {
         return INVALID_FORMAT;
     }
@@ -1139,17 +1150,14 @@ async fn change_id_(id: String, old_id: String) -> &'static str {
     err
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 async fn check_id(
     rendezvous_server: String,
     old_id: String,
     id: String,
     uuid: String,
 ) -> &'static str {
-    let any_addr = Config::get_any_listen_addr();
-    if let Ok(mut socket) = FramedStream::new(
+    if let Ok(mut socket) = hbb_common::socket_client::connect_tcp(
         crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
-        any_addr,
         RENDEZVOUS_TIMEOUT,
     )
     .await

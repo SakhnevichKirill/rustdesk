@@ -18,7 +18,6 @@ pub use arboard::Clipboard as ClipboardContext;
 use hbb_common::compress::decompress;
 use hbb_common::{
     allow_err,
-    anyhow::bail,
     compress::compress as compress_func,
     config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     get_version_number, log,
@@ -31,10 +30,14 @@ use hbb_common::{
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
+use crate::ui_interface::{get_option, set_option};
+
 pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
+
+pub const SYNC_PEER_INFO_DISPLAYS: i32 = 1;
 
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
@@ -52,8 +55,8 @@ lazy_static::lazy_static! {
 pub fn global_init() -> bool {
     #[cfg(target_os = "linux")]
     {
-        if !scrap::is_x11() {
-            crate::server::wayland::set_wayland_scrap_map_err();
+        if !*IS_X11 {
+            crate::server::wayland::init();
         }
     }
     true
@@ -103,6 +106,54 @@ pub fn check_clipboard(
             }
         }
     }
+    None
+}
+
+/// Set sound input device.
+pub fn set_sound_input(device: String) {
+    let prior_device = get_option("audio-input".to_owned());
+    if prior_device != device {
+        log::info!("switch to audio input device {}", device);
+        std::thread::spawn(move || {
+            set_option("audio-input".to_owned(), device);
+        });
+    } else {
+        log::info!("audio input is already set to {}", device);
+    }
+}
+
+/// Get system's default sound input device name.
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn get_default_sound_input() -> Option<String> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        use cpal::traits::{DeviceTrait, HostTrait};
+        let host = cpal::default_host();
+        let dev = host.default_input_device();
+        return if let Some(dev) = dev {
+            match dev.name() {
+                Ok(name) => Some(name),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let input = crate::platform::linux::get_default_pa_source();
+        return if let Some(input) = input {
+            Some(input.1)
+        } else {
+            None
+        };
+    }
+}
+
+#[inline]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn get_default_sound_input() -> Option<String> {
     None
 }
 
@@ -293,15 +344,7 @@ async fn test_nat_type_() -> ResultType<bool> {
     let start = std::time::Instant::now();
     let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await;
     let server1 = rendezvous_server;
-    let tmp: Vec<&str> = server1.split(":").collect();
-    if tmp.len() != 2 {
-        bail!("Invalid server address: {}", server1);
-    }
-    let port: u16 = tmp[1].parse()?;
-    if port == 0 {
-        bail!("Invalid server address: {}", server1);
-    }
-    let server2 = format!("{}:{}", tmp[0], port - 1);
+    let server2 = crate::increase_port(&server1, -1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
     msg_out.set_test_nat_request(TestNatRequest {
@@ -310,21 +353,18 @@ async fn test_nat_type_() -> ResultType<bool> {
     });
     let mut port1 = 0;
     let mut port2 = 0;
-    let server1 = socket_client::get_target_addr(&server1)?;
-    let server2 = socket_client::get_target_addr(&server2)?;
-    let mut addr = Config::get_any_listen_addr();
     for i in 0..2 {
         let mut socket = socket_client::connect_tcp(
-            if i == 0 {
-                server1.clone()
-            } else {
-                server2.clone()
-            },
-            addr,
+            if i == 0 { &*server1 } else { &*server2 },
             RENDEZVOUS_TIMEOUT,
         )
         .await?;
-        addr = socket.local_addr();
+        if i == 0 {
+            Config::set_option(
+                "local-ip-addr".to_owned(),
+                socket.local_addr().ip().to_string(),
+            );
+        }
         socket.send(&msg_out).await?;
         if let Some(Ok(bytes)) = socket.next_timeout(RENDEZVOUS_TIMEOUT).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
@@ -347,7 +387,6 @@ async fn test_nat_type_() -> ResultType<bool> {
             break;
         }
     }
-    Config::set_option("local-ip-addr".to_owned(), addr.ip().to_string());
     let ok = port1 > 0 && port2 > 0;
     if ok {
         let t = if port1 == port2 {
@@ -368,13 +407,7 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, boo
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
     let mut b: Vec<String> = b
         .drain(..)
-        .map(|x| {
-            if !x.contains(":") {
-                format!("{}:{}", x, config::RENDEZVOUS_PORT)
-            } else {
-                x
-            }
-        })
+        .map(|x| socket_client::check_port(x, config::RENDEZVOUS_PORT))
         .collect();
     let c = if b.contains(&a) {
         b = b.drain(..).filter(|x| x != &a).collect();
@@ -424,7 +457,6 @@ async fn test_rendezvous_server_() {
             let tm = std::time::Instant::now();
             if socket_client::connect_tcp(
                 crate::check_port(&host, RENDEZVOUS_PORT),
-                Config::get_any_listen_addr(),
                 RENDEZVOUS_TIMEOUT,
             )
             .await
@@ -471,6 +503,7 @@ pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::p
     }
 }
 
+#[inline]
 pub fn username() -> String {
     // fix bug of whoami
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -480,12 +513,21 @@ pub fn username() -> String {
 }
 
 #[inline]
+pub fn hostname() -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return whoami::hostname();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return DEVICE_NAME.lock().unwrap().clone();
+}
+
+#[inline]
 pub fn check_port<T: std::string::ToString>(host: T, port: i32) -> String {
-    let host = host.to_string();
-    if !host.contains(":") {
-        return format!("{}:{}", host, port);
-    }
-    return host;
+    hbb_common::socket_client::check_port(host, port)
+}
+
+#[inline]
+pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
+    hbb_common::socket_client::increase_port(host, offset)
 }
 
 pub const POSTFIX_SERVICE: &'static str = "_service";
@@ -524,10 +566,9 @@ pub fn check_software_update() {
 async fn check_software_update_() -> hbb_common::ResultType<()> {
     sleep(3.).await;
 
-    let rendezvous_server =
-        socket_client::get_target_addr(&format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT))?;
-    let mut socket =
-        socket_client::new_udp(Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT).await?;
+    let rendezvous_server = format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT);
+    let (mut socket, rendezvous_server) =
+        socket_client::new_udp_for(&rendezvous_server, RENDEZVOUS_TIMEOUT).await?;
 
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {
@@ -549,11 +590,6 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
     Ok(())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
-pub fn get_icon() -> String {
-    hbb_common::config::ICON.to_owned()
-}
-
 pub fn get_app_name() -> String {
     hbb_common::config::APP_NAME.read().unwrap().clone()
 }
@@ -565,12 +601,6 @@ pub fn get_full_name() -> String {
         hbb_common::config::ORG.read().unwrap(),
         hbb_common::config::APP_NAME.read().unwrap(),
     )
-}
-
-pub fn is_ip(id: &str) -> bool {
-    hbb_common::regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+(:\d+)?$")
-        .unwrap()
-        .is_match(id)
 }
 
 pub fn is_setup(name: &str) -> bool {
@@ -603,18 +633,13 @@ pub fn get_api_server(api: String, custom: String) -> String {
             return lic.api.clone();
         }
     }
-    let s = get_custom_rendezvous_server(custom);
-    if !s.is_empty() {
-        if s.contains(':') {
-            let tmp: Vec<&str> = s.split(":").collect();
-            if tmp.len() == 2 {
-                let port: u16 = tmp[1].parse().unwrap_or(0);
-                if port > 2 {
-                    return format!("http://{}:{}", tmp[0], port - 2);
-                }
-            }
-        } else {
+    let s0 = get_custom_rendezvous_server(custom);
+    if !s0.is_empty() {
+        let s = crate::increase_port(&s0, -2);
+        if s == s0 {
             return format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
+        } else {
+            return format!("http://{}", s);
         }
     }
     "https://admin.rustdesk.com".to_owned()
@@ -669,7 +694,7 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
         if !res.is_empty() {
             return Ok(res);
         }
-        bail!(String::from_utf8_lossy(&output.stderr).to_string());
+        hbb_common::bail!(String::from_utf8_lossy(&output.stderr).to_string());
     }
 }
 
@@ -689,13 +714,59 @@ pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Mess
     msg_out
 }
 
+pub fn is_keyboard_mode_supported(keyboard_mode: &KeyboardMode, version_number: i64) -> bool {
+    match keyboard_mode {
+        KeyboardMode::Legacy => true,
+        KeyboardMode::Map => version_number >= hbb_common::get_version_number("1.2.0"),
+        KeyboardMode::Translate => version_number >= hbb_common::get_version_number("1.2.0"),
+        KeyboardMode::Auto => version_number >= hbb_common::get_version_number("1.2.0"),
+    }
+}
+
+pub fn get_supported_keyboard_modes(version: i64) -> Vec<KeyboardMode> {
+    KeyboardMode::iter()
+        .filter(|&mode| is_keyboard_mode_supported(mode, version))
+        .map(|&mode| mode)
+        .collect::<Vec<_>>()
+}
+
 #[cfg(not(target_os = "linux"))]
 lazy_static::lazy_static! {
-    pub static ref IS_X11: Mutex<bool> = Mutex::new(false);
+    pub static ref IS_X11: bool = false;
 
 }
 
 #[cfg(target_os = "linux")]
 lazy_static::lazy_static! {
-    pub static ref IS_X11: Mutex<bool> = Mutex::new("x11" == hbb_common::platform::linux::get_display_server());
+    pub static ref IS_X11: bool = "x11" == hbb_common::platform::linux::get_display_server();
+}
+
+pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> String {
+    use serde_json::json;
+    let mut fd_json = serde_json::Map::new();
+    fd_json.insert("id".into(), json!(id));
+    fd_json.insert("path".into(), json!(path));
+
+    let mut entries_out = vec![];
+    for entry in entries {
+        let mut entry_map = serde_json::Map::new();
+        entry_map.insert("entry_type".into(), json!(entry.entry_type.value()));
+        entry_map.insert("name".into(), json!(entry.name));
+        entry_map.insert("size".into(), json!(entry.size));
+        entry_map.insert("modified_time".into(), json!(entry.modified_time));
+        entries_out.push(entry_map);
+    }
+    fd_json.insert("entries".into(), json!(entries_out));
+    serde_json::to_string(&fd_json).unwrap_or("".into())
+}
+
+/// The function to handle the url scheme sent by the system.
+///
+/// 1. Try to send the url scheme from ipc.
+/// 2. If failed to send the url scheme, we open a new main window to handle this url scheme.
+pub fn handle_url_scheme(url: String) {
+    if let Err(err) = crate::ipc::send_url_scheme(url.clone()) {
+        log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
+        let _ = crate::run_me(vec![url]);
+    }
 }

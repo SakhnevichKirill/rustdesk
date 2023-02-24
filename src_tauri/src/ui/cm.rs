@@ -53,6 +53,18 @@ impl InvokeUiCM for TauriHandler {
     fn show_elevation(&self, show: bool) {
         self.call_tauri("showElevation", show);
     }
+    
+    fn update_voice_call_state(&self, client: &crate::ui_cm_interface::Client) {
+        // TODO:
+        self.call_tauri(
+            "updateVoiceCallState",
+            (
+                client.id,
+                client.in_voice_call,
+                client.incoming_voice_call
+            ),
+        );
+    }
 }
 
 impl TauriHandler {
@@ -95,7 +107,7 @@ impl TauriConnectionManager {
     }
 
     fn get_icon(&mut self) -> String {
-        crate::get_icon()
+        super::get_icon()
     }
 
     pub fn check_click_time(&mut self, id: i32) {

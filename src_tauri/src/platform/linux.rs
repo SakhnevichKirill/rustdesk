@@ -1,7 +1,7 @@
 use super::{CursorData, ResultType};
+use hbb_common::libc::{c_char, c_int, c_long, c_void};
 pub use hbb_common::platform::linux::*;
 use hbb_common::{allow_err, bail, log};
-use libc::{c_char, c_int, c_void};
 use std::{
     cell::RefCell,
     path::PathBuf,
@@ -53,8 +53,8 @@ pub struct xcb_xfixes_get_cursor_image {
     pub height: u16,
     pub xhot: u16,
     pub yhot: u16,
-    pub cursor_serial: libc::c_long,
-    pub pixels: *const libc::c_long,
+    pub cursor_serial: c_long,
+    pub pixels: *const c_long,
 }
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
@@ -425,102 +425,9 @@ pub fn is_login_wayland() -> bool {
     }
 }
 
-pub fn fix_login_wayland() {
-    let mut file = "/etc/gdm3/custom.conf".to_owned();
-    if !std::path::Path::new(&file).exists() {
-        file = "/etc/gdm/custom.conf".to_owned();
-    }
-    match std::process::Command::new("pkexec")
-        .args(vec![
-            "sed",
-            "-i",
-            "s/#WaylandEnable=false/WaylandEnable=false/g",
-            &file,
-        ])
-        .output()
-    {
-        Ok(x) => {
-            let x = String::from_utf8_lossy(&x.stderr);
-            if !x.is_empty() {
-                log::error!("fix_login_wayland failed: {}", x);
-            }
-        }
-        Err(err) => {
-            log::error!("fix_login_wayland failed: {}", err);
-        }
-    }
-}
-
 pub fn current_is_wayland() -> bool {
     let dtype = get_display_server();
     return "wayland" == dtype && unsafe { UNMODIFIED };
-}
-
-pub fn modify_default_login() -> String {
-    let dsession = std::env::var("DESKTOP_SESSION").unwrap();
-    let user_name = std::env::var("USERNAME").unwrap();
-    if let Ok(x) = run_cmds("ls /usr/share/* | grep ${DESKTOP_SESSION}-xorg.desktop".to_owned()) {
-        if x.trim_end().to_string() != "" {
-            match std::process::Command::new("pkexec")
-                .args(vec![
-                    "sed",
-                    "-i",
-                    &format!("s/={0}$/={0}-xorg/g", &dsession),
-                    &format!("/var/lib/AccountsService/users/{}", &user_name),
-                ])
-                .output()
-            {
-                Ok(x) => {
-                    let x = String::from_utf8_lossy(&x.stderr);
-                    if !x.is_empty() {
-                        log::error!("modify_default_login failed: {}", x);
-                        return "Fix failed! Please re-login with X server manually".to_owned();
-                    } else {
-                        unsafe {
-                            UNMODIFIED = false;
-                        }
-                        return "".to_owned();
-                    }
-                }
-                Err(err) => {
-                    log::error!("modify_default_login failed: {}", err);
-                    return "Fix failed! Please re-login with X server manually".to_owned();
-                }
-            }
-        } else if let Ok(z) =
-            run_cmds("ls /usr/share/* | grep ${DESKTOP_SESSION:0:-8}.desktop".to_owned())
-        {
-            if z.trim_end().to_string() != "" {
-                match std::process::Command::new("pkexec")
-                    .args(vec![
-                        "sed",
-                        "-i",
-                        &format!("s/={}$/={}/g", &dsession, &dsession[..dsession.len() - 8]),
-                        &format!("/var/lib/AccountsService/users/{}", &user_name),
-                    ])
-                    .output()
-                {
-                    Ok(x) => {
-                        let x = String::from_utf8_lossy(&x.stderr);
-                        if !x.is_empty() {
-                            log::error!("modify_default_login failed: {}", x);
-                            return "Fix failed! Please re-login with X server manually".to_owned();
-                        } else {
-                            unsafe {
-                                UNMODIFIED = false;
-                            }
-                            return "".to_owned();
-                        }
-                    }
-                    Err(err) => {
-                        log::error!("modify_default_login failed: {}", err);
-                        return "Fix failed! Please re-login with X server manually".to_owned();
-                    }
-                }
-            }
-        }
-    }
-    return "Fix failed! Please re-login with X server manually".to_owned();
 }
 
 // to-do: test the other display manager
@@ -626,6 +533,24 @@ pub fn get_pa_sources() -> Vec<(String, String)> {
     out
 }
 
+pub fn get_default_pa_source() -> Option<(String, String)> {
+    use pulsectl::controllers::*;
+    match SourceController::create() {
+        Ok(mut handler) => {
+            if let Ok(dev) = handler.get_default_device() {
+                return Some((
+                    dev.name.unwrap_or("".to_owned()),
+                    dev.description.unwrap_or("".to_owned()),
+                ));
+            }
+        }
+        Err(err) => {
+            log::error!("Failed to get_pa_source: {:?}", err);
+        }
+    }
+    None
+}
+
 pub fn lock_screen() {
     std::process::Command::new("xdg-screensaver")
         .arg("lock")
@@ -706,12 +631,12 @@ pub fn get_double_click_time() -> u32 {
     unsafe {
         let mut double_click_time = 0u32;
         let property = std::ffi::CString::new("gtk-double-click-time").unwrap();
-        let setings = gtk_settings_get_default();
+        let settings = gtk_settings_get_default();
         g_object_get(
-            setings,
+            settings,
             property.as_ptr(),
             &mut double_click_time as *mut u32,
-            0 as *const libc::c_void,
+            0 as *const c_void,
         );
         double_click_time
     }

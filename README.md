@@ -12,9 +12,7 @@ go to `./src_tauri/README.md`
 ## Start
 `yarn start`
 
-`cd src_tauri`
-
-`cargo tauri dev`
+[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
 ## TODO:
 Sciter => React

@@ -16,7 +16,7 @@ use hwcodec::{
     ffmpeg::{CodecInfo, CodecInfos, DataFormat},
     AVPixelFormat,
     Quality::{self, *},
-    RateContorl::{self, *},
+    RateControl::{self, *},
 };
 use std::sync::{Arc, Mutex};
 
@@ -31,7 +31,7 @@ const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_YUV420P;
 pub const DEFAULT_TIME_BASE: [i32; 2] = [1, 30];
 const DEFAULT_GOP: i32 = 60;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
-const DEFAULT_RC: RateContorl = RC_DEFAULT;
+const DEFAULT_RC: RateControl = RC_DEFAULT;
 
 pub struct HwEncoder {
     encoder: Encoder,
@@ -293,8 +293,8 @@ pub fn check_config() {
         quality: DEFAULT_HW_QUALITY,
         rc: DEFAULT_RC,
     };
-    let encoders = CodecInfo::score(Encoder::avaliable_encoders(ctx));
-    let decoders = CodecInfo::score(Decoder::avaliable_decoders());
+    let encoders = CodecInfo::score(Encoder::available_encoders(ctx));
+    let decoders = CodecInfo::score(Decoder::available_decoders());
 
     if let Ok(old_encoders) = get_config(CFG_KEY_ENCODER) {
         if let Ok(old_decoders) = get_config(CFG_KEY_DECODER) {
@@ -317,16 +317,30 @@ pub fn check_config() {
 }
 
 pub fn check_config_process(force_reset: bool) {
-    if force_reset {
-        HwCodecConfig::remove();
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        std::thread::spawn(move || {
-            std::process::Command::new(exe)
-                .arg("--check-hwcodec-config")
-                .status()
-                .ok();
-            HwCodecConfig::refresh();
-        });
-    };
+    use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
+
+    std::thread::spawn(move || {
+        if force_reset {
+            HwCodecConfig::remove();
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(file_name) = exe.file_name().to_owned() {
+                let s = System::new_all();
+                let arg = "--check-hwcodec-config";
+                for process in s.processes_by_name(&file_name.to_string_lossy().to_string()) {
+                    if process.cmd().iter().any(|cmd| cmd.contains(arg)) {
+                        log::warn!("already have process {}", arg);
+                        return;
+                    }
+                }
+                if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
+                    let second = 3;
+                    std::thread::sleep(std::time::Duration::from_secs(second));
+                    // kill: Different platforms have different results
+                    child.kill().ok();
+                    HwCodecConfig::refresh();
+                }
+            }
+        };
+    });
 }

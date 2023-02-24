@@ -11,7 +11,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-
 const MAX_HEADER_LEN: usize = 1024;
 const SHOULD_SEND_TIME: Duration = Duration::from_secs(1);
 const SHOULD_SEND_SIZE: u64 = 1024 * 1024;
@@ -144,7 +143,6 @@ impl RecordUploader {
                     match file.seek(SeekFrom::Start(self.upload_size)) {
                         Ok(_) => match file.read_to_end(&mut buf) {
                             Ok(length) => {
-                                log::info!("send {} bytes", length);
                                 self.send(
                                     &[
                                         ("type", "part"),
@@ -152,7 +150,7 @@ impl RecordUploader {
                                         ("offset", &self.upload_size.to_string()),
                                         ("length", &length.to_string()),
                                     ],
-                                    buf.clone(),
+                                    buf,
                                 )?;
                                 self.upload_size = len;
                                 self.last_send = Instant::now();

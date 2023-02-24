@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use sciter::{
@@ -54,6 +54,7 @@ impl TauriHandler {
             }
         }
     }
+
 }
 
 impl InvokeUiSession for TauriHandler {
@@ -80,8 +81,8 @@ impl InvokeUiSession for TauriHandler {
         }
     }
 
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, _cursor_embeded: bool) {
-        self.call_tauri("setDisplay", (x, y, w, h, _cursor_embeded));
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embeded: bool) {
+        self.call_tauri("setDisplay", (x, y, w, h, cursor_embeded));
         // TODO: start, stop streaming
         log::info!("[video] reinitialized");
         //     // https://sciter.com/forums/topic/color_spaceiyuv-crash
@@ -174,7 +175,7 @@ impl InvokeUiSession for TauriHandler {
         only_count: bool,
     ) {
         let mut m = make_fd(id, entries, only_count, path);
-        self.call_tauri("updateTransferList",m);
+        self.call_tauri("updateFolderFiles",m);
     }
 
     fn update_transfer_list(&self) {
@@ -233,6 +234,14 @@ impl InvokeUiSession for TauriHandler {
         ));
     }
 
+    fn set_displays(&self, displays: &Vec<DisplayInfo>) {
+        // TODO:
+        self.call_tauri(
+            "updateDisplays", 
+            displays
+        );
+    }
+
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
             ConnType::RDP => {}
@@ -263,6 +272,31 @@ impl InvokeUiSession for TauriHandler {
     fn update_block_input_state(&self, on: bool) {
         self.call_tauri("updateBlockInputState",on);
     }
+
+    fn switch_back(&self, _id: &str) {}
+
+    fn on_voice_call_started(&self) {
+        self.call_tauri("onVoiceCallStart", ());
+    }
+
+    fn on_voice_call_closed(&self, reason: &str) {
+        self.call_tauri("onVoiceCallClosed", reason);
+    }
+
+    fn on_voice_call_waiting(&self) {
+        self.call_tauri("onVoiceCallWaiting", ());
+    }
+
+    fn on_voice_call_incoming(&self) {
+        self.call_tauri("onVoiceCallIncoming", ());
+    }
+
+    /// RGBA is directly rendered by [on_rgba]. No need to store the rgba for the sciter ui.
+    fn get_rgba(&self) -> *const u8 {
+        std::ptr::null()
+    }
+
+    fn next_rgba(&mut self) {}
 }
 
 pub struct TauriSession(Session<TauriHandler>);
@@ -320,7 +354,7 @@ impl sciter::EventHandler for  TauriSession {
                     let site = AssetPtr::adopt(ptr as *mut video_destination);
                     log::debug!("[video] start video");
                     *VIDEO.lock().unwrap() = Some(site);
-                    self.reconnect();
+                    self.reconnect(false);
                 }
             }
             BEHAVIOR_EVENTS::VIDEO_INITIALIZED => {
@@ -359,6 +393,9 @@ impl TauriSession {
             id: id.clone(),
             password: password.clone(),
             args,
+            server_keyboard_enabled: Arc::new(RwLock::new(true)),
+            server_file_transfer_enabled: Arc::new(RwLock::new(true)),
+            server_clipboard_enabled: Arc::new(RwLock::new(true)),
             ..Default::default()
         };
 
@@ -372,7 +409,11 @@ impl TauriSession {
             ConnType::DEFAULT_CONN
         };
 
-        session.lc.write().unwrap().initialize(id, conn_type);
+        session
+            .lc
+            .write()
+            .unwrap()
+            .initialize(id, conn_type, None, false);
 
         Self(session)
     }
@@ -394,7 +435,7 @@ impl TauriSession {
     }
 
     pub fn get_icon(&self) -> String {
-        crate::get_icon()
+        super::get_icon()
     }
 
     fn supported_hwcodec(&self) -> (bool, bool) {

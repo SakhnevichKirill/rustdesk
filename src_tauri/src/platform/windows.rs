@@ -11,6 +11,7 @@ use std::io::prelude::*;
 use std::{
     ffi::OsString,
     fs, io, mem,
+    os::windows::process::CommandExt,
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -24,7 +25,7 @@ use winapi::{
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
-            OpenProcessToken,
+            OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
         },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
@@ -49,6 +50,7 @@ use winreg::RegKey;
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
+        #[allow(invalid_value)]
         let mut out = mem::MaybeUninit::uninit().assume_init();
         if GetCursorPos(&mut out) == FALSE {
             return None;
@@ -61,6 +63,7 @@ pub fn reset_input_cache() {}
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
     unsafe {
+        #[allow(invalid_value)]
         let mut ci: CURSORINFO = mem::MaybeUninit::uninit().assume_init();
         ci.cbSize = std::mem::size_of::<CURSORINFO>() as _;
         if crate::portable_service::client::get_cursor_info(&mut ci) == FALSE {
@@ -79,6 +82,7 @@ struct IconInfo(ICONINFO);
 impl IconInfo {
     fn new(icon: HICON) -> ResultType<Self> {
         unsafe {
+            #[allow(invalid_value)]
             let mut ii = mem::MaybeUninit::uninit().assume_init();
             if GetIconInfo(icon, &mut ii) == FALSE {
                 Err(io::Error::last_os_error().into())
@@ -439,6 +443,7 @@ extern "C" {
     fn win32_disable_lowlevel_keyboard(hwnd: HWND);
     fn win_stop_system_key_propagate(v: BOOL);
     fn is_win_down() -> BOOL;
+    fn is_local_system() -> BOOL;
 }
 
 extern "system" {
@@ -718,10 +723,10 @@ pub fn set_share_rdp(enable: bool) {
 }
 
 pub fn get_active_username() -> String {
-    let name = crate::username();
-    if name != "SYSTEM" {
-        return name;
+    if !is_root() {
+        return crate::username();
     }
+
     extern "C" {
         fn get_active_user(path: *mut u16, n: u32, rdp: BOOL) -> u32;
     }
@@ -757,7 +762,8 @@ pub fn is_prelogin() -> bool {
 }
 
 pub fn is_root() -> bool {
-    crate::username() == "SYSTEM"
+    // https://stackoverflow.com/questions/4023586/correct-way-to-find-out-if-a-service-is-running-as-the-system-user
+    unsafe { is_local_system() == TRUE }
 }
 
 pub fn lock_screen() {
@@ -827,8 +833,8 @@ fn get_default_install_path() -> String {
 
 pub fn check_update_broker_process() -> ResultType<()> {
     // let (_, path, _, _) = get_install_info();
-    let process_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE;
-    let origin_process_exe = crate::ui::win_privacy::ORIGIN_PROCESS_EXE;
+    let process_exe = crate::win_privacy::INJECTED_PROCESS_EXE;
+    let origin_process_exe = crate::win_privacy::ORIGIN_PROCESS_EXE;
 
     let exe_file = std::env::current_exe()?;
     if exe_file.parent().is_none() {
@@ -836,6 +842,11 @@ pub fn check_update_broker_process() -> ResultType<()> {
     }
     let cur_dir = exe_file.parent().unwrap();
     let cur_exe = cur_dir.join(process_exe);
+
+    if !std::path::Path::new(&cur_exe).exists() {
+        std::fs::copy(origin_process_exe, cur_exe)?;
+        return Ok(());
+    }
 
     let ori_modified = fs::metadata(origin_process_exe)?.modified()?;
     if let Ok(metadata) = fs::metadata(&cur_exe) {
@@ -908,8 +919,8 @@ pub fn copy_exe_cmd(src_exe: &str, _exe: &str, path: &str) -> String {
         ",
         main_exe = main_exe,
         path = path,
-        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        ORIGIN_PROCESS_EXE = crate::win_privacy::ORIGIN_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
     );
 }
 
@@ -927,7 +938,7 @@ pub fn update_me() -> ResultType<()> {
         {lic}
     ",
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path),
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         app_name = crate::get_app_name(),
         lic = register_licence(),
         cur_pid = get_current_pid(),
@@ -1192,7 +1203,7 @@ fn get_before_uninstall() -> String {
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
-        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        broker_exe = crate::win_privacy::INJECTED_PROCESS_EXE,
         ext = ext,
         cur_pid = get_current_pid(),
     )
@@ -1366,22 +1377,6 @@ pub fn get_license() -> Option<License> {
 pub fn bootstrap() {
     if let Some(lic) = get_license() {
         *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
-        #[cfg(feature = "hbbs")]
-        {
-            if !is_win_server() {
-                return;
-            }
-            crate::hbbs::bootstrap(&lic.key, &lic.host);
-            std::thread::spawn(move || loop {
-                let tmp = Config::get_option("stop-rendezvous-service");
-                if tmp.is_empty() {
-                    crate::hbbs::start();
-                } else {
-                    crate::hbbs::stop();
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            });
-        }
     }
 }
 
@@ -1650,6 +1645,29 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
     }
 }
 
+#[inline]
+fn filter_foreground_window(process_id: DWORD) -> ResultType<bool> {
+    if let Ok(output) = std::process::Command::new("tasklist")
+        .args(vec![
+            "/SVC",
+            "/NH",
+            "/FI",
+            &format!("PID eq {}", process_id),
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        let s = String::from_utf8_lossy(&output.stdout)
+            .to_string()
+            .to_lowercase();
+        Ok(["Taskmgr", "mmc", "regedit"]
+            .iter()
+            .any(|name| s.contains(&name.to_string().to_lowercase())))
+    } else {
+        bail!("run tasklist failed");
+    }
+}
+
 pub fn is_foreground_window_elevated() -> ResultType<bool> {
     unsafe {
         let mut process_id: DWORD = 0;
@@ -1657,7 +1675,12 @@ pub fn is_foreground_window_elevated() -> ResultType<bool> {
         if process_id == 0 {
             bail!("Failed to get processId, errno {}", GetLastError())
         }
-        is_elevated(Some(process_id))
+        let elevated = is_elevated(Some(process_id))?;
+        if elevated {
+            filter_foreground_window(process_id)
+        } else {
+            Ok(false)
+        }
     }
 }
 
@@ -1711,4 +1734,53 @@ pub fn send_message_to_hnwd(
         }
     }
     return true;
+}
+
+pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) -> ResultType<()> {
+    unsafe {
+        let wuser = wide_string(user);
+        let wpc = wide_string("");
+        let wpwd = wide_string(pwd);
+        let cmd = if arg.is_empty() {
+            format!("\"{}\"", exe)
+        } else {
+            format!("\"{}\" {}", exe, arg)
+        };
+        let mut wcmd = wide_string(&cmd);
+        let mut si: STARTUPINFOW = mem::zeroed();
+        si.wShowWindow = SW_HIDE as _;
+        si.lpDesktop = NULL as _;
+        si.cb = std::mem::size_of::<STARTUPINFOW>() as _;
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        let mut pi: PROCESS_INFORMATION = mem::zeroed();
+        let wexe = wide_string(exe);
+        if FALSE
+            == CreateProcessWithLogonW(
+                wuser.as_ptr(),
+                wpc.as_ptr(),
+                wpwd.as_ptr(),
+                LOGON_WITH_PROFILE,
+                wexe.as_ptr(),
+                wcmd.as_mut_ptr(),
+                CREATE_UNICODE_ENVIRONMENT,
+                NULL,
+                NULL as _,
+                &mut si as *mut STARTUPINFOW,
+                &mut pi as *mut PROCESS_INFORMATION,
+            )
+        {
+            bail!("CreateProcessWithLogonW failed, errno={}", GetLastError());
+        }
+    }
+    return Ok(());
+}
+
+pub fn set_path_permission(dir: &PathBuf, permission: &str) -> ResultType<()> {
+    std::process::Command::new("icacls")
+        .arg(dir.as_os_str())
+        .arg("/grant")
+        .arg(format!("Everyone:(OI)(CI){}", permission))
+        .arg("/T")
+        .spawn()?;
+    Ok(())
 }
