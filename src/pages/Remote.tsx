@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Box, Center, CircularProgress, Text } from '@chakra-ui/react'
 
@@ -30,7 +30,9 @@ const Remote = () => {
     const [remoteDim, setRemoteDim] = useState({ width: 0, height: 0 })
     const [pixels, setPixels] = useState<Uint8ClampedArray>(new Uint8ClampedArray([0]))
     const [reconnectTimeout, setReconnectTimeout] = useState(1000) 
-    const [initMuxer, setInitMuxer] = useState<boolean>(false)
+    // const [initMuxer, setInitMuxer] = useState<boolean>(false)
+
+    const [initBuffer, setInitBuffer] = useState<boolean>(false)
 
     useEffect(() => {
         const listenEvents = async () => {
@@ -113,9 +115,94 @@ const Remote = () => {
         }
     }, [])
 
+    let frames = [];
+    const videoRef = useRef<HTMLVideoElement | null>(null)
+    const mediaSource = useMemo(() => new MediaSource(), [])
+    let mediaSrcBuffer: SourceBuffer | null = null
+
+    useEffect(() => {
+        const video = videoRef.current
+        if ('MediaSource' in window && video) {
+            video.src = URL.createObjectURL(mediaSource)
+            mediaSource.addEventListener('sourceopen', handleSourceOpen)
+            mediaSource.addEventListener('sourceended', function(e) { 
+                console.log('sourceended: ' + mediaSource.readyState);
+                // Nothing else to load
+                mediaSource.endOfStream();
+                // Start playback!
+                // Note: this will fail if video is not muted, due to rules about
+                // autoplay and non-muted videos
+                video.play();
+            });
+            mediaSource.addEventListener('sourceclose', function(e) { console.log('sourceclose: ' + mediaSource.readyState); });
+            mediaSource.addEventListener('error', function(e) { console.log('error: ' + mediaSource.readyState); });
+            return () => {
+                mediaSource.removeEventListener('sourceopen', handleSourceOpen)
+            };
+        } else{
+            console.log(video)
+            console.error('Doesnt support MediaSource')
+        }
+    }, [mediaSource])
+
+    const handleSourceOpen = () => {
+       mediaSrcBuffer = mediaSource.addSourceBuffer('video/webm;codecs="vp9,vorbis"')
+       console.log('sourceopen: ' + mediaSource.readyState);
+    }
+
     useEffect(() => {
         const listenEvents = async () => {
-            const unlistenEncodedFrames = await listen('encoded_frames', (e: { payload: EncodedFrame }) => {
+            const unlistenEncodedFrames = await listen('encoded_frame', (e: { payload: EncodedFrame }) => {
+                let frame = e.payload
+                if (mediaSrcBuffer) {
+                    if (mediaSrcBuffer.updating) {
+                        frames.push(frame);
+                    } else {
+                        // TODO: data: Uint8Array //Uint8ClampedArray 
+                        // key: boolean
+                        // pts: number
+
+                        
+                        if (frame.key) {
+                            console.log("write_video: key={}", frame.key)
+                            setInitBuffer(frame.key)
+                        }
+                        let pts = frame.pts * 1_000_000
+                        console.log("pts", pts)
+                        mediaSrcBuffer.appendBuffer(frame.data); 
+
+                        // TODO: we need call "appendBuffer" only if initBuffer==True (begin of vp9 stram), but "initBuffer" not changing on "setInitBuffer" call
+                        // if (initBuffer) {
+                        //     console.log(initBuffer)
+                        //     mediaSrcBuffer.appendBuffer(frame.data); 
+                        // }
+                        
+                        // TODO: If you want new frame.key=True without "reconnect", then call "refresh_video"
+                        // invoke("refresh_video").then(
+                        //         () => {
+                        //             console.log("refresh_video")
+                        //             // invoke("record_screen").then()
+                        //         }
+                        //     )
+
+
+                        // TODO: end of vp9 stream stream when ever you want
+                        
+                    }
+                }
+                
+                // e.payload.map((frame: EncodedFrame) => {
+                    
+                    
+                // })
+
+                
+                // console.log(e)
+                // // TODO могут данные прийти, а буфера нет открылось?
+                // if (mediaSrcBuffer) {
+                //     const binArr = new Uint8Array(e.payload.data)
+                //     mediaSrcBuffer.appendBuffer(binArr.buffer)
+                // }
 
                 // tmp_muxer.addVideoChunkRaw(
                 //     e.payload.data,
@@ -139,7 +226,7 @@ const Remote = () => {
               } 
            }) 
         }
-    }, [initMuxer])
+    }, [initBuffer])
 
     useEffect(() => {
         console.log("remoteDim", remoteDim)
@@ -170,6 +257,7 @@ const Remote = () => {
                 }
                 <Text>{msg}</Text>
             </Box>
+            <video ref={videoRef}/>
         </Center>
     )
 }

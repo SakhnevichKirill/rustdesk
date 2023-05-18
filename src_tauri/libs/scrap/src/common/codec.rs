@@ -307,7 +307,7 @@ impl Decoder {
         &mut self,
         frame: &video_frame::Union,
         rgb: &mut Vec<u8>,
-    ) -> ResultType<(bool, hbb_common::message_proto::EncodedVideoFrame)> {
+    ) -> ResultType<(bool, hbb_common::message_proto::EncodedVideoFrame, EncodedVideoFrames)> {
         match frame {
             video_frame::Union::Vp9s(vp9s) => {
                 Decoder::handle_vp9s_video_frame(&mut self.vpx, vp9s, rgb)
@@ -352,7 +352,7 @@ impl Decoder {
         decoder: &mut VpxDecoder,
         vp9s: &EncodedVideoFrames,
         rgb: &mut Vec<u8>,
-    ) -> ResultType<(bool, hbb_common::message_proto::EncodedVideoFrame)> {
+    ) -> ResultType<(bool, hbb_common::message_proto::EncodedVideoFrame, EncodedVideoFrames)> {
         let mut last_frame = Image::new();
         let mut last_encoded_frame = hbb_common::message_proto::EncodedVideoFrame::new();
         for vp9 in vp9s.frames.iter() {
@@ -367,10 +367,12 @@ impl Decoder {
             last_frame = frame;
         }
         if last_frame.is_null() {
-            Ok((false, last_encoded_frame))
+            // Ok((false, last_encoded_frame))
+            Ok((false, last_encoded_frame, vp9s.clone()))
         } else {
             last_frame.rgb(1, true, rgb);
-            Ok((true, last_encoded_frame))
+            // Ok((true, last_encoded_frame))
+            Ok((true, last_encoded_frame, vp9s.clone()))
         }
     }
 

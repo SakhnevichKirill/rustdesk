@@ -216,10 +216,17 @@ impl InvokeUiSession for TauriHandler {
         self.call_tauri("on_record", ());
     }
 
+
     // on encoded_frames frontend decods frames to RGBA
-    fn on_encoded_frames(&self, encoded_frame: &EncodedVideoFrame) {
+    fn on_encoded_frame(&self, encoded_frame: &EncodedVideoFrame) {
         // log::info!("on_encoded_frames {:#?}", encoded_frame);
-        self.call_tauri("encoded_frames", encoded_frame);
+        self.call_tauri("encoded_frame", encoded_frame);
+    }
+
+    // on encoded_frames frontend decods frames to RGBA
+    fn on_encoded_frames(&self, encoded_frames: &::std::vec::Vec<EncodedVideoFrame>) {
+        // log::info!("on_encoded_frames {:#?}", encoded_frame);
+        self.call_tauri("encoded_frames", encoded_frames);
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {

@@ -608,7 +608,8 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn adapt_size(&self);
     fn on_rgba(&self, data: &[u8]);
     fn on_record(&self);
-    fn on_encoded_frames(&self, encoded_frames: &EncodedVideoFrame);
+    fn on_encoded_frame(&self, encoded_frame: &EncodedVideoFrame);
+    fn on_encoded_frames(&self, encoded_frames: &Vec<EncodedVideoFrame>);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
@@ -885,11 +886,12 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let frame_count_cl = frame_count.clone();
     let ui_handler = handler.ui_handler.clone();
     let mut record = false;
-    let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8], frames: &EncodedVideoFrame| {
+    let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8], frame: &EncodedVideoFrame, frames: &EncodedVideoFrames| {
             frame_count_cl.fetch_add(1, Ordering::Relaxed);
             // ui_handler.on_rgba(data);
             // log::info!("on_encoded_frames {:#?}", frames);
-            ui_handler.on_encoded_frames(frames);
+            ui_handler.on_encoded_frame(&frame);
+            // ui_handler.on_encoded_frames(&frames.frames);
             if record {
                 ui_handler.on_record();
                 record = false;
